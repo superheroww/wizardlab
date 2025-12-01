@@ -1,9 +1,12 @@
 import type { Metadata } from "next";
 
-import { supabaseAdmin } from "@/lib/supabase/admin";
+import { createClient } from "@/utils/supabase/server";
 
 import SocialEngageTable from "./SocialEngageTable";
 import { SELECT_FIELDS, SocialEngageRow } from "./types";
+
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 export const metadata: Metadata = {
   title: "Social Engagement Stream",
@@ -14,7 +17,8 @@ export const metadata: Metadata = {
 };
 
 export default async function Page() {
-  const { data, error } = await supabaseAdmin
+  const supabase = createClient();
+  const { data, error } = await supabase
     .from("social_engage")
     .select(SELECT_FIELDS)
     .order("created_at", { ascending: false })

@@ -4,6 +4,9 @@ import { generateRedditReply } from "@/tools/reddit/reply/generateReply";
 import { IngestPayload, insertEngagementRow, findExistingEngagementByPermalink } from "@/lib/socialEngage";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 
 export async function POST(req: NextRequest) {
