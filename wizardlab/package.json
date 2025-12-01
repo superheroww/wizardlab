@@ -4,7 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "next build --webpack",
+    "build:legacy": "NEXT_DISABLE_LIGHTNINGCSS=1 next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "test:classifier": "ts-node scripts/testClassifier.ts",
