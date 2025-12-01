@@ -1,0 +1,13 @@
+{
+  "name": "wizardlab-root",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["wizardlab"],
+  "scripts": {
+    "build": "npm --workspace=wizardlab run build",
+    "vercel-build": "npm run build"
+  },
+  "devDependencies": {
+    "next": "16.0.6"
+  }
+}
