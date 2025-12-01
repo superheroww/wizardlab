@@ -18,11 +18,11 @@ interface SocialEngageRow {
   title: string | null;
   body: string | null;
   source: string | null;
-  classifier_should_reply: boolean | null;
-  classifier_confidence: number | null;
-  classifier_reason: string | null;
+  should_reply: boolean | null;
+  relevance_score: number | null;
+  relevance_reason: string | null;
   reply_text: string | null;
-  workflow_status: string | null;
+  status: string | null;
   posted_at: string | null;
 }
 
@@ -34,11 +34,11 @@ const SELECT_FIELDS = [
   "title",
   "body",
   "source",
-  "classifier_should_reply",
-  "classifier_confidence",
-  "classifier_reason",
+  "should_reply",
+  "relevance_score",
+  "relevance_reason",
   "reply_text",
-  "workflow_status",
+  "status",
   "posted_at",
 ].join(",");
 
@@ -118,9 +118,9 @@ export default async function Page() {
                   <td className="px-3 py-2">{formatDate(row.created_at)}</td>
                   <td className="px-3 py-2">{row.platform ?? "—"}</td>
                   <td className="px-3 py-2">{row.source ?? "—"}</td>
-                  <td className="px-3 py-2">{row.workflow_status ?? "—"}</td>
-                  <td className="px-3 py-2">{formatBoolean(row.classifier_should_reply)}</td>
-                  <td className="px-3 py-2">{formatConfidence(row.classifier_confidence)}</td>
+                  <td className="px-3 py-2">{row.status ?? "—"}</td>
+                  <td className="px-3 py-2">{formatBoolean(row.should_reply)}</td>
+                  <td className="px-3 py-2">{formatConfidence(row.relevance_score)}</td>
                   <td className="px-3 py-2">
                     {row.permalink ? (
                       <a
