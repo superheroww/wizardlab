@@ -8,5 +8,5 @@ if (!supabaseUrl || !supabaseServiceRoleKey) {
 }
 
 export function createClient() {
-  return createSupabaseClient(supabaseUrl, supabaseServiceRoleKey);
+  return createSupabaseClient(supabaseUrl!, supabaseServiceRoleKey!);
 }
