@@ -34,7 +34,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const payload: IngestPayload = { platform, permalink, title, body, source };
+  const trackingUrl =
+    platform === "reddit"
+      ? (() => {
+          const match = permalink.match(/\/comments\/([a-z0-9]+)/i);
+          return match ? `https://wizardfolio.com/?src=reddit&post=${match[1]}` : undefined;
+        })()
+      : undefined;
+
+  const payload: IngestPayload = { platform, permalink, title, body, source, trackingUrl };
 
   try {
     const { data: existingEngagement, error: existingError } =

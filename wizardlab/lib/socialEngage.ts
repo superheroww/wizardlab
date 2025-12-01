@@ -9,6 +9,7 @@ export type IngestPayload = {
   title: string;
   body?: string;
   source?: string;
+  trackingUrl?: string;
 };
 
 type InsertArgs = {

@@ -6,14 +6,16 @@ type ReplyPayload = {
   permalink: string;
   title: string;
   body?: string;
+  trackingUrl?: string;
 };
 
-const buildPrompt = ({ platform, permalink, title, body }: ReplyPayload) => {
+const buildPrompt = ({ platform, permalink, title, body, trackingUrl }: ReplyPayload) => {
   const details = [
     `Platform: ${platform}`,
     `Permalink: ${permalink}`,
     `Title: ${title}`,
     body ? `Body: ${body}` : undefined,
+    trackingUrl ? `Tracking URL: ${trackingUrl}` : undefined,
   ].filter(Boolean);
 
   return [redditReplyPrompt, ...details].join("\n\n");
