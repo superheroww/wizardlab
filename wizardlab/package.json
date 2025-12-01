@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build --webpack",
+    "build": "NEXT_DISABLE_LIGHTNINGCSS=1 next build --webpack",
     "build:legacy": "NEXT_DISABLE_LIGHTNINGCSS=1 next build --webpack",
     "start": "next start",
     "lint": "eslint",
@@ -19,7 +19,7 @@
     "react-dom": "19.2.0"
   },
   "devDependencies": {
-    "@tailwindcss/postcss": "^4",
+    "@tailwindcss/postcss": "^4.1.17",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
