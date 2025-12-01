@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { classifyRedditPost } from "@/tools/reddit/classifier/classify";
 import { generateRedditReply } from "@/tools/reddit/reply/generateReply";
-import { IngestPayload, insertEngagementRow } from "@/lib/socialEngage";
+import { IngestPayload, insertEngagementRow, findExistingEngagementByPermalink } from "@/lib/socialEngage";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 
@@ -36,6 +37,21 @@ export async function POST(req: NextRequest) {
   const payload: IngestPayload = { platform, permalink, title, body, source };
 
   try {
+    const { data: existingEngagement, error: existingError } =
+      await findExistingEngagementByPermalink(supabaseAdmin, platform, permalink);
+
+    if (existingError) {
+      throw existingError;
+    }
+
+    if (existingEngagement) {
+      console.info("social_engage: skipping already existing permalink", { platform, permalink });
+      return NextResponse.json(
+        { ok: true, skipped: true, reason: "already_exists" },
+        { status: 200 }
+      );
+    }
+
     const classification = await classifyRedditPost(payload);
 
     if (!classification.should_reply) {

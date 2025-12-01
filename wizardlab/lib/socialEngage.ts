@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { ClassifierResult } from "@/tools/reddit/classifier/classify";
 import { MODELS } from "@/tools/utils/openai";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 export type IngestPayload = {
   platform: string;
@@ -40,4 +41,17 @@ export async function insertEngagementRow({ payload, classifier, replyText }: In
   }
 
   return row;
+}
+
+export async function findExistingEngagementByPermalink(
+  client: SupabaseClient,
+  platform: string,
+  permalink: string
+) {
+  return client
+    .from("social_engage")
+    .select("id, status")
+    .eq("platform", platform)
+    .eq("permalink", permalink)
+    .maybeSingle();
 }
