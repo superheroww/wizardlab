@@ -7,16 +7,17 @@ export const revalidate = 0;
 
 const WEBHOOK_SECRET = process.env.WEBHOOK_SECRET;
 
-type IngestRequest = {
-  platform: string;
-  source: string;
-  url: string;
+type SocialIngestPayload = {
+  platform?: unknown;
+  source?: unknown;
+  url?: unknown;
 };
+
+const isNonEmptyString = (value: unknown): value is string =>
+  typeof value === "string" && value.trim().length > 0;
 
 const truncateTitle = (value: string, limit = 120) =>
   value.length > limit ? `${value.slice(0, limit - 1)}…` : value;
-
-const validateString = (value: unknown) => typeof value === "string" && value.trim().length > 0;
 
 export async function POST(req: NextRequest) {
   if (!WEBHOOK_SECRET) {
@@ -29,17 +30,20 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  let requestBody: IngestRequest;
+  let payload: SocialIngestPayload;
   try {
-    requestBody = await req.json();
+    payload = await req.json();
   } catch (error) {
     console.error("social_ingest: invalid payload", error);
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
-  const { platform, source, url } = requestBody ?? {};
-  if (!validateString(platform) || !validateString(source) || !validateString(url)) {
-    return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+  const platform = isNonEmptyString(payload?.platform) ? payload.platform.trim() : "";
+  const url = isNonEmptyString(payload?.url) ? payload.url.trim() : "";
+  const source = isNonEmptyString(payload?.source) ? payload.source.trim() : undefined;
+
+  if (!platform || !url) {
+    return NextResponse.json({ error: "platform and url are required" }, { status: 400 });
   }
 
   if (platform !== "reddit") {
@@ -50,32 +54,41 @@ export async function POST(req: NextRequest) {
   try {
     resolvedPost = await resolveRedditPost(url);
   } catch (error) {
-    console.error("social_ingest: failed to resolve Reddit post", {
-      error: error instanceof Error ? error.message : error,
-      url,
-    });
-    return NextResponse.json({ error: "Failed to resolve Reddit post" }, { status: 502 });
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("social_ingest: failed to resolve Reddit post", { error: message, url });
+
+    if (message.startsWith("Unsupported Reddit URL:")) {
+      return NextResponse.json(
+        { ok: true, skipped: true, reason: "unsupported_or_reply_url" },
+        { status: 200 }
+      );
+    }
+
+    return NextResponse.json({ error: "failed to resolve reddit post" }, { status: 502 });
   }
+
+  const sourceValue = source ?? "gmail-f5bot";
+  const channel = resolvedPost.extra.subreddit ?? null;
 
   console.info("reddit ingest: resolved", {
     platform,
-    external_post_id: resolvedPost.externalPostId,
-    subreddit: resolvedPost.subreddit,
+    external_post_id: resolvedPost.external_post_id,
+    subreddit: channel,
     title: truncateTitle(resolvedPost.title),
   });
 
-  const additionalMeta = {
-    external_created_at: resolvedPost.externalCreatedAt,
-    raw_reddit_source: source,
+  const additionalMeta: Record<string, unknown> = {
+    ...resolvedPost.extra,
     raw_reddit_url: url,
-    raw_reddit_subreddit: resolvedPost.subreddit,
-  } as Record<string, string>;
+    raw_reddit_source: source ?? null,
+    raw_reddit_subreddit: channel,
+  };
 
   const selectResponse = await supabaseAdmin
     .from("social_engage")
     .select("id, extra")
     .eq("platform", platform)
-    .eq("external_post_id", resolvedPost.externalPostId)
+    .eq("external_post_id", resolvedPost.external_post_id)
     .maybeSingle();
 
   if (selectResponse.error) {
@@ -84,20 +97,22 @@ export async function POST(req: NextRequest) {
   }
 
   const existingRow = selectResponse.data;
+  let recordId: string | null = null;
 
   if (existingRow?.id) {
+    recordId = existingRow.id;
     const previousExtra = (existingRow.extra ?? {}) as Record<string, unknown>;
     const mergedExtra = { ...previousExtra, ...additionalMeta };
 
     const updateResponse = await supabaseAdmin
       .from("social_engage")
       .update({
-        permalink: resolvedPost.canonicalUrl,
-        author_handle: resolvedPost.author,
-        channel: resolvedPost.subreddit,
+        permalink: resolvedPost.permalink,
+        author_handle: resolvedPost.author_handle,
+        channel,
         title: resolvedPost.title,
         body: resolvedPost.body,
-        source,
+        source: sourceValue,
         extra: mergedExtra,
       })
       .eq("id", existingRow.id);
@@ -109,38 +124,48 @@ export async function POST(req: NextRequest) {
 
     console.info("social_engage: updated", {
       platform,
-      external_post_id: resolvedPost.externalPostId,
+      external_post_id: resolvedPost.external_post_id,
     });
   } else {
-    const insertResponse = await supabaseAdmin.from("social_engage").insert({
-      platform,
-      external_post_id: resolvedPost.externalPostId,
-      external_comment_id: null,
-      permalink: resolvedPost.canonicalUrl,
-      author_handle: resolvedPost.author,
-      channel: resolvedPost.subreddit,
-      title: resolvedPost.title,
-      body: resolvedPost.body,
-      source,
-      extra: additionalMeta,
-    });
+    const insertResponse = await supabaseAdmin
+      .from("social_engage")
+      .insert({
+        platform,
+        external_post_id: resolvedPost.external_post_id,
+        external_comment_id: null,
+        permalink: resolvedPost.permalink,
+        author_handle: resolvedPost.author_handle,
+        channel,
+        title: resolvedPost.title,
+        body: resolvedPost.body,
+        source: sourceValue,
+        extra: additionalMeta,
+      })
+      .select("id")
+      .single();
 
-    if (insertResponse.error) {
+    if (insertResponse.error || !insertResponse.data?.id) {
       console.error("social_engage: insert failed", insertResponse.error);
       return NextResponse.json({ error: "Failed to write social_engage" }, { status: 500 });
     }
 
+    recordId = insertResponse.data.id;
+
     console.info("social_engage: inserted", {
       platform,
-      external_post_id: resolvedPost.externalPostId,
+      external_post_id: resolvedPost.external_post_id,
     });
   }
 
-  return NextResponse.json({
-    ok: true,
-    platform,
-    external_post_id: resolvedPost.externalPostId,
-    permalink: resolvedPost.canonicalUrl,
-    source,
-  });
+  return NextResponse.json(
+    {
+      ok: true,
+      id: recordId,
+      platform,
+      external_post_id: resolvedPost.external_post_id,
+      permalink: resolvedPost.permalink,
+      source: sourceValue,
+    },
+    { status: 200 }
+  );
 }
