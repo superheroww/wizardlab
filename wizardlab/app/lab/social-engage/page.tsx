@@ -64,7 +64,7 @@ const getReplyPreview = (text: string | null) => {
 
 export default async function Page() {
   const { data, error } = await supabaseAdmin
-    .from<SocialEngageRow>("social_engage")
+    .from("social_engage")
     .select(SELECT_FIELDS)
     .order("created_at", { ascending: false })
     .limit(100);
