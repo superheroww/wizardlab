@@ -3,7 +3,7 @@
 This repo is the backend and tooling home for wizardLab, a Next.js App Router + Supabase toolbox that automates engagement across platforms like Reddit, TikTok, X, and YouTube using AI-powered micro-agents.
 
 ## Quick start
-1. Copy `.env.local.example` to `.env.local` and fill in the Supabase and OpenAI keys/models (`OPENAI_API_KEY`, `OPENAI_MODEL_CLASSIFIER`, `OPENAI_MODEL_REPLY`, `OPENAI_MODEL_CODEX`).
+1. Copy `.env.local.example` to `.env.local` and fill in the Supabase and OpenAI keys/models (`OPENAI_API_KEY`, `OPENAI_MODEL_CLASSIFIER`, `OPENAI_MODEL_REPLY`).
 2. Run `npm install`.
 3. Use `npm run test:classifier` and `npm run test:reply` to exercise the shared OpenAI client with the classifier and reply flows.
 
