@@ -64,12 +64,12 @@ const getReplyPreview = (text: string | null) => {
 
 export default async function Page() {
   const { data, error } = await supabaseAdmin
-    .from("social_engage")
+    .from<SocialEngageRow>("social_engage")
     .select(SELECT_FIELDS)
     .order("created_at", { ascending: false })
     .limit(100);
 
-  const rows = (data ?? []) as SocialEngageRow[];
+  const rows = data ?? [];
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
