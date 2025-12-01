@@ -132,28 +132,30 @@ export default function SocialEngageTable({ rows }: SocialEngageTableProps) {
         </p>
       </div>
 
-      <div className="overflow-x-auto rounded border border-zinc-200 shadow-sm">
-        <table className="w-full min-w-[780px] divide-y divide-zinc-200 text-left text-sm">
-          <thead className="bg-zinc-100 text-xs uppercase tracking-wide text-zinc-600">
+      <div className="overflow-x-auto rounded border border-zinc-200 bg-white/60 shadow-lg shadow-zinc-200/40 dark:border-zinc-700 dark:bg-zinc-950/50">
+        <table className="w-full min-w-[780px] divide-y divide-zinc-200 dark:divide-zinc-800 text-left text-sm">
+          <thead className="bg-zinc-100/90 text-[0.7rem] uppercase tracking-wide text-zinc-600 dark:bg-zinc-900/60 dark:text-zinc-300">
             <tr>
               {SORTABLE_COLUMNS.map((column, index) => {
                 const isActive = sortKey === column.key;
                 const directionIndicator = isActive ? (sortDirection === "asc" ? "▲" : "▼") : "↕";
+                const headerClass =
+                  "px-4 py-3 text-left font-semibold tracking-wider text-zinc-700 dark:text-zinc-300 whitespace-nowrap";
                 return (
                   <Fragment key={`header-${column.key}`}>
                     {index === 6 && (
-                      <th scope="col" className="px-3 py-2 font-medium">
+                      <th className="px-4 py-3 text-left font-semibold tracking-wider text-zinc-700 dark:text-zinc-300 whitespace-nowrap">
                         Permalink
                       </th>
                     )}
                     <th
                       scope="col"
-                      className="cursor-pointer px-3 py-2 font-medium"
+                      className={`${headerClass} cursor-pointer`}
                       onClick={() => toggleSort(column.key)}
                     >
                       <div className="flex items-center gap-1">
                         <span>{column.label}</span>
-                        <span className={`text-[0.65rem] ${isActive ? "text-zinc-900" : "text-zinc-400"}`}>
+                        <span className={`text-[0.65rem] ${isActive ? "text-zinc-900 dark:text-white" : "text-zinc-400"}`}>
                           {directionIndicator}
                         </span>
                       </div>
@@ -163,22 +165,27 @@ export default function SocialEngageTable({ rows }: SocialEngageTableProps) {
               })}
             </tr>
           </thead>
-          <tbody className="divide-y divide-zinc-200 text-zinc-700">
+          <tbody className="divide-y divide-zinc-200 text-zinc-700 dark:divide-zinc-800 dark:text-zinc-200">
             {sortedRows.map((row) => (
-              <tr key={row.id} className="odd:bg-white even:bg-zinc-50">
-                <td className="px-3 py-2">{formatDate(row.created_at)}</td>
-                <td className="px-3 py-2">{row.platform ?? "—"}</td>
-                <td className="px-3 py-2">{row.source ?? "—"}</td>
-                <td className="px-3 py-2">{row.status ?? "—"}</td>
-                <td className="px-3 py-2">{formatBoolean(row.should_reply)}</td>
-                <td className="px-3 py-2">{formatConfidence(row.relevance_score)}</td>
-                <td className="px-3 py-2">
+              <tr
+                key={row.id}
+                className="odd:bg-white even:bg-zinc-50 dark:odd:bg-zinc-900 dark:even:bg-zinc-950 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900"
+              >
+                <td className="px-4 py-3 max-w-[140px] text-left text-xs font-normal uppercase tracking-tight text-zinc-500">
+                  {formatDate(row.created_at)}
+                </td>
+                <td className="px-4 py-3 max-w-[140px] truncate">{row.platform ?? "—"}</td>
+                <td className="px-4 py-3 max-w-[140px] truncate">{row.source ?? "—"}</td>
+                <td className="px-4 py-3 max-w-[140px] truncate">{row.status ?? "—"}</td>
+                <td className="px-4 py-3 max-w-[140px] truncate">{formatBoolean(row.should_reply)}</td>
+                <td className="px-4 py-3 max-w-[120px] truncate">{formatConfidence(row.relevance_score)}</td>
+                <td className="px-4 py-3 whitespace-nowrap">
                   {row.permalink ? (
                     <a
                       href={row.permalink}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-blue-600 underline transition-colors hover:text-blue-800"
+                      className="text-blue-600 underline transition-colors hover:text-blue-800 dark:text-sky-300"
                     >
                       Link
                     </a>
@@ -186,8 +193,8 @@ export default function SocialEngageTable({ rows }: SocialEngageTableProps) {
                     "—"
                   )}
                 </td>
-                <td className="px-3 py-2 whitespace-pre-wrap break-words">{row.title || "—"}</td>
-                <td className="px-3 py-2 whitespace-pre-wrap break-words">{row.reply_text || "—"}</td>
+                <td className="px-4 py-3 max-w-[320px] truncate">{row.title || "—"}</td>
+                <td className="px-4 py-3 max-w-[420px] whitespace-pre-wrap break-words">{row.reply_text || "—"}</td>
               </tr>
             ))}
           </tbody>
