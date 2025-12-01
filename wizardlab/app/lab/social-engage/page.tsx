@@ -69,7 +69,7 @@ export default async function Page() {
     .order("created_at", { ascending: false })
     .limit(100);
 
-  const rows = data ?? [];
+  const rows = (data ?? []) as unknown as SocialEngageRow[];
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
