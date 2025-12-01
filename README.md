@@ -1,6 +1,6 @@
 # wizardlab
 
-This repo is the backend and tooling home for wizardLab, a Next.js App Router + Supabase toolbox that automates engagement across platforms like Reddit, TikTok, X, and YouTube using AI-powered micro-agents.
+This repo is the backend and tooling home for wizardLab, a Next.js App Router + Supabase toolbox that automates engagement across platforms like Reddit, TikTok, X, and YouTube using AI-powered micro-agents. The AI system is composed of data ingestion hooks, classifier logic, and reply generation helpers that together decide which items to reply to and what to say while keeping Supabase as the durable source of truth.
 
 ## Quick start
 1. Copy `.env.local.example` to `.env.local` and fill in the Supabase and OpenAI keys/models (`OPENAI_API_KEY`, `OPENAI_MODEL_CLASSIFIER`, `OPENAI_MODEL_REPLY`).
@@ -18,10 +18,11 @@ This repo is the backend and tooling home for wizardLab, a Next.js App Router + 
 - `db/tables_schema.sql`: Manual snapshot of critical tables like `social_engage`; update it by hand whenever those definitions change.
 
 ## Business logic overview
-- **Classifier layer** ingests incoming platform context (title, body, permalink, platform) and feeds a reusable prompt into the shared OpenAI client to decide whether to reply, capturing `{ should_reply, confidence, reason }`.
-- **Reply generator layer** reuses the same client with a reply prompt plus the same context to return a short, human-sounding response that stays calm and neutral.
-- **social_engage table** stores every candidate plus metadata: classifier decision, reply text/model, workflow status (`pending`, `ignored`, `approved`, `posted`), posting timestamps, source, and raw payloads for diagnostics.
-- **Scripts** under `scripts/` (`testClassifier.ts`, `testReply.ts`) let you run the classifier and reply pipelines locally against the shared OpenAI client before wiring them into any automations.
+- **AI ingestion pipeline** accepts canonical URLs (currently from Gmail → F5Bot) and resolves the remote post metadata before persisting it so the AI can reason over the latest title/body/permalink.
+- **Classifier layer** ingests that platform context (title, body, permalink, platform) along with the shared prompts and feeds the OpenAI client to decide whether to reply, capturing `{ should_reply, confidence, reason }`.
+- **Reply generator layer** reuses the same client with a reply prompt plus the same context to craft a short, calm response that matches our tone guardrails.
+- **social_engage table** stores each candidate plus metadata: classifier decision, reply text/model, workflow status (`pending`, `ignored`, `approved`, `posted`), posting timestamps, source, and raw payloads for diagnostics.
+- **Automation scripts** under `scripts/` (`testClassifier.ts`, `testReply.ts`) let you exercise the classifier and reply pipelines locally before wiring them into automated flows.
 
 ## Endpoints
 - `/`: The only Next.js route today renders the placeholder landing page; no additional API routes exist yet.
