@@ -24,12 +24,12 @@ export default async function Page() {
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 space-y-6">
-      <header className="space-y-3 border-b border-zinc-200 pb-6 text-zinc-900 dark:border-zinc-800 dark:text-zinc-100">
-        <h1 className="text-2xl font-semibold tracking-tight">Social Engagement Stream</h1>
-        <p className="max-w-3xl text-sm text-zinc-600 dark:text-zinc-400">
+      <header className="space-y-3 border-b border-zinc-200 pb-6 text-zinc-900 dark:border-zinc-800 dark:text-white">
+        <h1 className="text-2xl font-semibold tracking-tight text-zinc-900 dark:text-white">Social Engagement Stream</h1>
+        <p className="max-w-3xl text-sm text-zinc-600 dark:text-white/70">
           Debug view of the Gmail/F5Bot → wizardLab AI pipeline. No actions can be taken here.
         </p>
-        <div className="flex flex-wrap items-baseline gap-4 text-sm text-zinc-600 dark:text-zinc-400">
+        <div className="flex flex-wrap items-baseline gap-4 text-sm text-zinc-600 dark:text-white/70">
           <span>
             Loaded <span className="font-semibold text-zinc-900 dark:text-zinc-100">{rows.length}</span> rows
           </span>
