@@ -80,6 +80,7 @@ export default function SocialEngageTable({ rows }: SocialEngageTableProps) {
   const [filter, setFilter] = useState<"all" | "yes" | "no">("all");
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
+  const [modalContent, setModalContent] = useState<string | null>(null);
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
@@ -109,9 +110,9 @@ export default function SocialEngageTable({ rows }: SocialEngageTableProps) {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 pb-3 text-sm text-zinc-600">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 pb-3 text-sm text-zinc-600 dark:text-white/70">
         <div className="flex items-center gap-2">
-          <span className="font-medium text-zinc-900">Should reply filter:</span>
+          <span className="font-medium text-zinc-900 dark:text-white">Should reply filter:</span>
           {filterOptions.map((option) => (
             <button
               key={option.value}
@@ -119,15 +120,15 @@ export default function SocialEngageTable({ rows }: SocialEngageTableProps) {
               onClick={() => setFilter(option.value)}
               className={`rounded-full border px-3 py-1 text-xs transition ${
                 filter === option.value
-                  ? "border-zinc-900 bg-zinc-900 text-white"
-                  : "border-zinc-300 bg-white text-zinc-600 hover:border-zinc-500"
+                  ? "border-zinc-900 bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
+                  : "border-zinc-300 bg-white text-zinc-600 hover:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
               }`}
             >
               {option.label}
             </button>
           ))}
         </div>
-        <p className="text-xs text-zinc-500">
+        <p className="text-xs text-zinc-500 dark:text-white/70">
           Showing {filteredRows.length} of {rows.length} rows · sort by clicking column headers
         </p>
       </div>
@@ -194,12 +195,51 @@ export default function SocialEngageTable({ rows }: SocialEngageTableProps) {
                   )}
                 </td>
                 <td className="px-4 py-3 max-w-[320px] truncate">{row.title || "—"}</td>
-                <td className="px-4 py-3 max-w-[420px] whitespace-pre-wrap break-words">{row.reply_text || "—"}</td>
+                <td className="px-4 py-3 max-w-[420px]">
+                  {row.reply_text ? (
+                    <button
+                      type="button"
+                      onClick={() => setModalContent(row.reply_text ?? "")}
+                      className="w-full text-left text-sm text-zinc-600 transition hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:text-zinc-300 dark:hover:text-zinc-100"
+                    >
+                      <span className="block line-clamp-2 overflow-hidden text-ellipsis whitespace-normal break-words text-zinc-600 dark:text-zinc-300">
+                        {row.reply_text}
+                      </span>
+                    </button>
+                  ) : (
+                    "—"
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      {modalContent && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center px-4 py-8">
+          <button
+            type="button"
+            aria-label="Close reply preview"
+            className="fixed inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => setModalContent(null)}
+          />
+          <div className="relative z-10 w-full max-w-2xl rounded-xl border border-zinc-200 bg-white p-6 shadow-xl shadow-zinc-400/30 dark:border-zinc-700 dark:bg-zinc-900">
+            <div className="flex items-start justify-between">
+              <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Reply preview</h2>
+              <button
+                type="button"
+                className="text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white"
+                onClick={() => setModalContent(null)}
+              >
+                Close
+              </button>
+            </div>
+            <div className="mt-4 max-h-[70vh] overflow-y-auto rounded-lg border border-zinc-100 bg-zinc-50/80 p-4 text-sm leading-6 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-950/80 dark:text-zinc-100">
+              <p className="whitespace-pre-wrap break-words">{modalContent}</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
