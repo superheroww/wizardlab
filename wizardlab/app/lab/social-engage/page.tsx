@@ -2,64 +2,15 @@ import type { Metadata } from "next";
 
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
+import SocialEngageTable from "./SocialEngageTable";
+import { SELECT_FIELDS, SocialEngageRow } from "./types";
+
 export const metadata: Metadata = {
   title: "Social Engagement Stream",
   robots: {
     index: false,
     follow: false,
   },
-};
-
-interface SocialEngageRow {
-  id: string;
-  created_at: string | null;
-  platform: string | null;
-  permalink: string | null;
-  title: string | null;
-  body: string | null;
-  source: string | null;
-  should_reply: boolean | null;
-  relevance_score: number | null;
-  relevance_reason: string | null;
-  reply_text: string | null;
-  status: string | null;
-  posted_at: string | null;
-}
-
-const SELECT_FIELDS = [
-  "id",
-  "created_at",
-  "platform",
-  "permalink",
-  "title",
-  "body",
-  "source",
-  "should_reply",
-  "relevance_score",
-  "relevance_reason",
-  "reply_text",
-  "status",
-  "posted_at",
-].join(",");
-
-const formatDate = (value: string | null) => {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(date);
-};
-
-const formatBoolean = (value: boolean | null) => (value === true ? "Yes" : value === false ? "No" : "—");
-
-const formatConfidence = (value: number | null) =>
-  value == null || Number.isNaN(value) ? "—" : value.toFixed(2);
-
-const getReplyPreview = (text: string | null) => {
-  if (!text) return "—";
-  return text.length > 120 ? `${text.slice(0, 120)}…` : text;
 };
 
 export default async function Page() {
@@ -97,51 +48,7 @@ export default async function Page() {
           No engagement rows found yet.
         </div>
       ) : (
-        <div className="overflow-x-auto rounded border border-zinc-200 shadow-sm">
-          <table className="w-full min-w-[700px] divide-y divide-zinc-200 text-left text-sm">
-            <thead className="bg-zinc-100 text-xs uppercase tracking-wide text-zinc-600">
-              <tr>
-                <th className="px-3 py-2 font-medium">Created</th>
-                <th className="px-3 py-2 font-medium">Platform</th>
-                <th className="px-3 py-2 font-medium">Source</th>
-                <th className="px-3 py-2 font-medium">Status</th>
-                <th className="px-3 py-2 font-medium">Should reply?</th>
-                <th className="px-3 py-2 font-medium">Confidence</th>
-                <th className="px-3 py-2 font-medium">Permalink</th>
-                <th className="px-3 py-2 font-medium">Title</th>
-                <th className="px-3 py-2 font-medium">Reply preview</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-zinc-200 text-zinc-700">
-              {rows.map((row) => (
-                <tr key={row.id} className="odd:bg-white even:bg-zinc-50">
-                  <td className="px-3 py-2">{formatDate(row.created_at)}</td>
-                  <td className="px-3 py-2">{row.platform ?? "—"}</td>
-                  <td className="px-3 py-2">{row.source ?? "—"}</td>
-                  <td className="px-3 py-2">{row.status ?? "—"}</td>
-                  <td className="px-3 py-2">{formatBoolean(row.should_reply)}</td>
-                  <td className="px-3 py-2">{formatConfidence(row.relevance_score)}</td>
-                  <td className="px-3 py-2">
-                    {row.permalink ? (
-                      <a
-                        href={row.permalink}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="text-blue-600 underline transition-colors hover:text-blue-800"
-                      >
-                        Link
-                      </a>
-                    ) : (
-                      "—"
-                    )}
-                  </td>
-                  <td className="px-3 py-2 max-w-[220px] truncate">{row.title ?? "—"}</td>
-                  <td className="px-3 py-2 max-w-[320px] truncate">{getReplyPreview(row.reply_text)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <SocialEngageTable rows={rows} />
       )}
     </div>
   );
