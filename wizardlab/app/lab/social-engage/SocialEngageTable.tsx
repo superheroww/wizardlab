@@ -50,7 +50,7 @@ export default function SocialEngageTable({ rows, filterMode = "none" }: Props) 
       const aValue = a[key as keyof SocialEngageRow];
       const bValue = b[key as keyof SocialEngageRow];
 
-      // created_at is always present, but guard anyway
+      // created_at sort
       if (key === "created_at") {
         const aDate = a.created_at ? new Date(a.created_at).getTime() : 0;
         const bDate = b.created_at ? new Date(b.created_at).getTime() : 0;
@@ -162,13 +162,6 @@ export default function SocialEngageTable({ rows, filterMode = "none" }: Props) 
                   className="whitespace-nowrap px-4 py-2"
                 />
                 <SortableHeader
-                  label="Platform"
-                  onClick={() => toggleSort("platform")}
-                  active={sortConfig.key === "platform"}
-                  direction={sortConfig.direction}
-                  className="px-4 py-2"
-                />
-                <SortableHeader
                   label="Channel"
                   onClick={() => toggleSort("channel")}
                   active={sortConfig.key === "channel"}
@@ -213,14 +206,12 @@ export default function SocialEngageTable({ rows, filterMode = "none" }: Props) 
                 const canReply = !!(row.ai_reply_draft || row.reply_text);
 
                 return (
-                  <tr key={row.id} className="hover:bg-zinc-50/80 dark:hover:bg-zinc-900">
+                  <tr
+                    key={row.id}
+                    className="hover:bg-zinc-50/80 dark:hover:bg-zinc-900"
+                  >
                     <td className="whitespace-nowrap px-4 py-2 text-xs text-zinc-600 dark:text-zinc-300">
                       {shortDateTime(row.created_at)}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2 text-xs">
-                      <span className="inline-flex items-center rounded-full bg-zinc-100 px-2 py-0.5 text-[0.7rem] font-medium uppercase tracking-wide text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
-                        {row.platform}
-                      </span>
                     </td>
                     <td className="whitespace-nowrap px-4 py-2 text-xs text-zinc-600 dark:text-zinc-300">
                       {row.channel || "—"}
@@ -237,7 +228,9 @@ export default function SocialEngageTable({ rows, filterMode = "none" }: Props) 
                       </div>
                     </td>
                     <td className="whitespace-nowrap px-4 py-2 text-right text-xs text-zinc-700 dark:text-zinc-200">
-                      {row.relevance_score != null ? row.relevance_score.toFixed(2) : "—"}
+                      {row.relevance_score != null
+                        ? row.relevance_score.toFixed(2)
+                        : "—"}
                     </td>
                     <td className="whitespace-nowrap px-4 py-2 text-xs">
                       <StatusBadge value={row.status} />
@@ -281,11 +274,8 @@ export default function SocialEngageTable({ rows, filterMode = "none" }: Props) 
               >
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="inline-flex items-center rounded-full bg-zinc-100 px-2 py-0.5 text-[0.65rem] font-medium uppercase tracking-wide text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
-                      {row.platform}
-                    </span>
                     {row.channel && (
-                      <span className="truncate text-[0.65rem] text-zinc-500 dark:text-zinc-400">
+                      <span className="inline-flex items-center rounded-full bg-zinc-100 px-2 py-0.5 text-[0.65rem] font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
                         {row.channel}
                       </span>
                     )}
@@ -318,7 +308,11 @@ export default function SocialEngageTable({ rows, filterMode = "none" }: Props) 
                       type="button"
                       onClick={() => {
                         if (row.permalink) {
-                          window.open(row.permalink, "_blank", "noopener,noreferrer");
+                          window.open(
+                            row.permalink,
+                            "_blank",
+                            "noopener,noreferrer"
+                          );
                         }
                       }}
                       className="rounded-full bg-zinc-100 px-3 py-1 text-[0.65rem] font-medium text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
@@ -343,7 +337,7 @@ export default function SocialEngageTable({ rows, filterMode = "none" }: Props) 
             );
           })
         ) : (
-          <div className="rounded-xl border border-zinc-200 bg-white p-3 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300">
+          <div className="rounded-xl border border-zinc-200 bg-white p-3 text-xs text-zinc-600 shadow-sm dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300">
             No rows match this filter.
           </div>
         )}
@@ -359,7 +353,7 @@ export default function SocialEngageTable({ rows, filterMode = "none" }: Props) 
                   AI reply draft
                 </h2>
                 <p className="text-[0.7rem] text-zinc-500 dark:text-zinc-400">
-                  {modalRow.platform} • {modalRow.channel || "no channel"} •{" "}
+                  {modalRow.channel || "no subreddit"} •{" "}
                   {shortDateTime(modalRow.created_at)}
                 </p>
               </div>
@@ -374,7 +368,9 @@ export default function SocialEngageTable({ rows, filterMode = "none" }: Props) 
 
             <div className="max-h-[52vh] overflow-y-auto px-4 py-3 text-sm text-zinc-800 dark:text-zinc-100">
               <pre className="whitespace-pre-wrap text-[0.8rem] leading-relaxed">
-                {modalRow.ai_reply_draft || modalRow.reply_text || "(No reply text found)"}
+                {modalRow.ai_reply_draft ||
+                  modalRow.reply_text ||
+                  "(No reply text found)"}
               </pre>
             </div>
 
@@ -463,16 +459,12 @@ function SortableHeader({
 
 function StatusBadge({ value }: { value: string }) {
   const normalized = value.toLowerCase();
-  let bg = "bg-zinc-100 text-zinc-700";
-  if (normalized === "ready") bg = "bg-emerald-100 text-emerald-700";
-  else if (normalized === "pending") bg = "bg-amber-100 text-amber-700";
-  else if (normalized === "posted") bg = "bg-blue-100 text-blue-700";
+  let base =
+    "inline-flex items-center rounded-full px-2 py-0.5 text-[0.65rem] font-medium capitalize ";
+  let variant = "bg-zinc-100 text-zinc-700";
+  if (normalized === "ready") variant = "bg-emerald-100 text-emerald-700";
+  else if (normalized === "pending") variant = "bg-amber-100 text-amber-700";
+  else if (normalized === "posted") variant = "bg-blue-100 text-blue-700";
 
-  return (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[0.65rem] font-medium capitalize ${bg} dark:bg-opacity-20`}
-    >
-      {value}
-    </span>
-  );
+  return <span className={base + variant}>{value}</span>;
 }
