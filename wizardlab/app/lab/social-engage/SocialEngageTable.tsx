@@ -1,301 +1,478 @@
+// app/lab/social-engage/SocialEngageTable.tsx
 "use client";
 
-import { Fragment, useEffect, useMemo, useState } from "react";
-
+import { useMemo, useState } from "react";
 import type { SocialEngageRow } from "./types";
 
-type SortKey = "created_at" | "status" | "should_reply" | "relevance_score" | "title" | "reply_text";
+type Props = {
+  rows: SocialEngageRow[];
+  // "status" enables Ready / Others toggle
+  filterMode?: "status" | "none";
+};
+
 type SortDirection = "asc" | "desc";
 
-const SORTABLE_COLUMNS: Array<{ key: SortKey; label: string }> = [
-  { key: "created_at", label: "Created" },
-  { key: "status", label: "Status" },
-  { key: "should_reply", label: "Should reply?" },
-  { key: "relevance_score", label: "Confidence" },
-  { key: "title", label: "Title" },
-  { key: "reply_text", label: "Reply preview" },
-];
-
-const formatDate = (value: string | null) => {
-  if (!value) return "—";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "—";
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "short",
-    timeStyle: "short",
-  }).format(date);
+type SortConfig = {
+  key: keyof SocialEngageRow | "created_at";
+  direction: SortDirection;
 };
 
-const formatBoolean = (value: boolean | null) => (value === true ? "Yes" : value === false ? "No" : "—");
+type StatusFilter = "all" | "ready" | "others";
 
-const formatConfidence = (value: number | null) =>
-  value == null || Number.isNaN(value) ? "—" : value.toFixed(2);
+export default function SocialEngageTable({ rows, filterMode = "none" }: Props) {
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [sortConfig, setSortConfig] = useState<SortConfig>({
+    key: "created_at",
+    direction: "desc",
+  });
 
-const previewSnippet = (text: string | null) => {
-  if (!text) return "—";
-  return text.length > 20 ? `${text.slice(0, 20)}…` : text;
-};
-
-const getSortValue = (row: SocialEngageRow, key: SortKey) => {
-  switch (key) {
-    case "created_at":
-      return row.created_at ? new Date(row.created_at).getTime() : -Infinity;
-    case "status":
-      return row.status ?? "";
-    case "should_reply":
-      return row.should_reply === true ? 1 : row.should_reply === false ? 0 : -1;
-    case "relevance_score":
-      return row.relevance_score ?? -Infinity;
-    case "title":
-      return row.title ?? "";
-    case "reply_text":
-      return row.reply_text ?? "";
-  }
-};
-
-const compareValues = (a: SocialEngageRow, b: SocialEngageRow, key: SortKey) => {
-  const left = getSortValue(a, key);
-  const right = getSortValue(b, key);
-  if (typeof left === "number" && typeof right === "number") {
-    return left - right;
-  }
-  if (typeof left === "string" && typeof right === "string") {
-    return left.localeCompare(right);
-  }
-  return 0;
-};
-
-const filterOptions: Array<{ label: string; value: "all" | "yes" | "no" }> = [
-  { label: "All", value: "all" },
-  { label: "Yes", value: "yes" },
-  { label: "No", value: "no" },
-];
-
-interface SocialEngageTableProps {
-  rows: SocialEngageRow[];
-  // control filtering mode: default is filtering by should_reply (existing behavior)
-  filterMode?: "should_reply" | "status";
-}
-
-export default function SocialEngageTable({ rows, filterMode = "should_reply" }: SocialEngageTableProps) {
-  const [filter, setFilter] = useState<"all" | "yes" | "no">("all");
-  const [sortKey, setSortKey] = useState<SortKey>("created_at");
-  const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
-  const [modalContent, setModalContent] = useState<string | null>(null);
-  const [copyMessage, setCopyMessage] = useState<string | null>(null);
-
-  useEffect(() => {
-    setCopyMessage(null);
-  }, [modalContent]);
+  const [modalRow, setModalRow] = useState<SocialEngageRow | null>(null);
 
   const filteredRows = useMemo(() => {
-    return rows.filter((row) => {
-      if (filterMode === "status") {
-        if (filter === "yes") return (row.status ?? "") === "ready";
-        if (filter === "no") return (row.status ?? "") !== "ready";
-        return true;
+    let current = [...rows];
+
+    if (filterMode === "status") {
+      if (statusFilter === "ready") {
+        current = current.filter((row) => row.status.toLowerCase() === "ready");
+      } else if (statusFilter === "others") {
+        current = current.filter((row) => row.status.toLowerCase() !== "ready");
       }
-      // default behavior: filter by should_reply
-      if (filter === "yes") return row.should_reply === true;
-      if (filter === "no") return row.should_reply === false;
-      return true;
-    });
-  }, [rows, filter, filterMode]);
+    }
+
+    return current;
+  }, [rows, filterMode, statusFilter]);
 
   const sortedRows = useMemo(() => {
-    const cloned = [...filteredRows];
-    cloned.sort((a, b) => {
-      const result = compareValues(a, b, sortKey);
-      return sortDirection === "asc" ? result : -result;
-    });
-    return cloned;
-  }, [filter, filteredRows, sortDirection, sortKey]);
+    const { key, direction } = sortConfig;
+    const dirFactor = direction === "asc" ? 1 : -1;
 
-  const toggleSort = (key: SortKey) => {
-    if (sortKey === key) {
-      setSortDirection((prev) => (prev === "asc" ? "desc" : "asc"));
-    } else {
-      setSortKey(key);
-      setSortDirection("desc");
+    return [...filteredRows].sort((a, b) => {
+      const aValue = a[key as keyof SocialEngageRow];
+      const bValue = b[key as keyof SocialEngageRow];
+
+      // created_at is always present, but guard anyway
+      if (key === "created_at") {
+        const aDate = a.created_at ? new Date(a.created_at).getTime() : 0;
+        const bDate = b.created_at ? new Date(b.created_at).getTime() : 0;
+        return (aDate - bDate) * dirFactor;
+      }
+
+      // numbers
+      if (typeof aValue === "number" || typeof bValue === "number") {
+        const aNum = Number(aValue ?? 0);
+        const bNum = Number(bValue ?? 0);
+        return (aNum - bNum) * dirFactor;
+      }
+
+      // strings / null
+      const aStr = (aValue ?? "") as string;
+      const bStr = (bValue ?? "") as string;
+      return aStr.localeCompare(bStr) * dirFactor;
+    });
+  }, [filteredRows, sortConfig]);
+
+  function toggleSort(key: SortConfig["key"]) {
+    setSortConfig((prev) => {
+      if (prev.key === key) {
+        return {
+          key,
+          direction: prev.direction === "asc" ? "desc" : "asc",
+        };
+      }
+      return { key, direction: "asc" };
+    });
+  }
+
+  async function handleCopyAndOpen(row: SocialEngageRow) {
+    const text = row.ai_reply_draft || row.reply_text || "";
+    if (!text) return;
+
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (err) {
+      console.error("Failed to copy:", err);
     }
-  };
+
+    setModalRow(null);
+
+    if (row.permalink) {
+      window.open(row.permalink, "_blank", "noopener,noreferrer");
+    }
+  }
+
+  function shortDateTime(value: string | null) {
+    if (!value) return "";
+    try {
+      return new Date(value).toLocaleString(undefined, {
+        dateStyle: "short",
+        timeStyle: "short",
+      });
+    } catch {
+      return value;
+    }
+  }
+
+  function truncate(text: string | null | undefined, max = 80) {
+    if (!text) return "";
+    if (text.length <= max) return text;
+    return text.slice(0, max) + "…";
+  }
+
+  const hasRows = sortedRows.length > 0;
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 pb-3 text-sm text-zinc-600 dark:text-white/70">
-        <div className="flex items-center gap-2">
-            <span className="font-medium text-zinc-900 dark:text-white">
-            {filterMode === "status" ? "Status filter:" : "Should reply filter:"}
-          </span>
-          {filterOptions.map((option) => (
-            <button
-              key={option.value}
-              type="button"
-              onClick={() => setFilter(option.value)}
-              className={`rounded-full border px-3 py-1 text-xs transition ${
-                filter === option.value
-                  ? "border-zinc-900 bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
-                  : "border-zinc-300 bg-white text-zinc-600 hover:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
-              }`}
-            >
-              {filterMode === "status" && option.value === "yes" ? "Ready" : option.label}
-            </button>
-          ))}
+      {/* Filter bar */}
+      {filterMode === "status" && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 text-xs sm:text-sm dark:border-zinc-800 dark:bg-zinc-900/60">
+          <div className="font-medium text-zinc-800 dark:text-zinc-100">
+            Status filter
+          </div>
+          <div className="inline-flex items-center gap-1 rounded-full bg-zinc-100 p-1 text-xs dark:bg-zinc-800">
+            <FilterChip
+              label="All"
+              active={statusFilter === "all"}
+              onClick={() => setStatusFilter("all")}
+            />
+            <FilterChip
+              label="Ready"
+              active={statusFilter === "ready"}
+              onClick={() => setStatusFilter("ready")}
+            />
+            <FilterChip
+              label="Others"
+              active={statusFilter === "others"}
+              onClick={() => setStatusFilter("others")}
+            />
+          </div>
         </div>
-        <p className="text-xs text-zinc-500 dark:text-white/70">
-          Showing {filteredRows.length} of {rows.length} rows · sort by clicking column headers
-        </p>
-      </div>
+      )}
 
-      {/* Desktop / wide screens: table */}
-      <div className="hidden sm:block overflow-x-auto rounded border border-zinc-200 bg-white/60 shadow-lg shadow-zinc-200/40 dark:border-zinc-700 dark:bg-zinc-950/50">
-        <table className="w-full divide-y divide-zinc-200 dark:divide-zinc-800 text-left text-sm">
-          <thead className="bg-zinc-100/90 text-[0.7rem] uppercase tracking-wide text-zinc-600 dark:bg-zinc-900/60 dark:text-zinc-300">
-            <tr>
-              {SORTABLE_COLUMNS.map((column, index) => {
-                const isActive = sortKey === column.key;
-                const directionIndicator = isActive ? (sortDirection === "asc" ? "▲" : "▼") : "↕";
-                const headerClass =
-                  "px-4 py-3 text-left font-semibold tracking-wider text-zinc-700 dark:text-zinc-300 whitespace-nowrap";
+      {/* Desktop table */}
+      <div className="hidden overflow-x-auto rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-950 md:block">
+        {hasRows ? (
+          <table className="min-w-full text-left text-sm">
+            <thead className="border-b border-zinc-200 bg-zinc-50 text-xs uppercase tracking-wide text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+              <tr>
+                <SortableHeader
+                  label="Created"
+                  onClick={() => toggleSort("created_at")}
+                  active={sortConfig.key === "created_at"}
+                  direction={sortConfig.direction}
+                  className="whitespace-nowrap px-4 py-2"
+                />
+                <SortableHeader
+                  label="Platform"
+                  onClick={() => toggleSort("platform")}
+                  active={sortConfig.key === "platform"}
+                  direction={sortConfig.direction}
+                  className="px-4 py-2"
+                />
+                <SortableHeader
+                  label="Channel"
+                  onClick={() => toggleSort("channel")}
+                  active={sortConfig.key === "channel"}
+                  direction={sortConfig.direction}
+                  className="px-4 py-2"
+                />
+                <SortableHeader
+                  label="Author"
+                  onClick={() => toggleSort("author_handle")}
+                  active={sortConfig.key === "author_handle"}
+                  direction={sortConfig.direction}
+                  className="px-4 py-2"
+                />
+                <SortableHeader
+                  label="Title / Body"
+                  onClick={() => toggleSort("title")}
+                  active={sortConfig.key === "title"}
+                  direction={sortConfig.direction}
+                  className="px-4 py-2"
+                />
+                <SortableHeader
+                  label="Score"
+                  onClick={() => toggleSort("relevance_score")}
+                  active={sortConfig.key === "relevance_score"}
+                  direction={sortConfig.direction}
+                  className="px-4 py-2 text-right"
+                />
+                <SortableHeader
+                  label="Status"
+                  onClick={() => toggleSort("status")}
+                  active={sortConfig.key === "status"}
+                  direction={sortConfig.direction}
+                  className="px-4 py-2"
+                />
+                <th className="px-4 py-2 text-right text-xs font-semibold uppercase tracking-wide text-zinc-500">
+                  AI reply
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+              {sortedRows.map((row) => {
+                const canReply = !!(row.ai_reply_draft || row.reply_text);
+
                 return (
-                  <Fragment key={`header-${column.key}`}>
-                    <th
-                      scope="col"
-                      className={`${headerClass} cursor-pointer`}
-                      onClick={() => toggleSort(column.key)}
-                    >
-                      <div className="flex items-center gap-1">
-                        <span>{column.label}</span>
-                        <span className={`text-[0.65rem] ${isActive ? "text-zinc-900 dark:text-white" : "text-zinc-400"}`}>
-                          {directionIndicator}
-                        </span>
+                  <tr key={row.id} className="hover:bg-zinc-50/80 dark:hover:bg-zinc-900">
+                    <td className="whitespace-nowrap px-4 py-2 text-xs text-zinc-600 dark:text-zinc-300">
+                      {shortDateTime(row.created_at)}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2 text-xs">
+                      <span className="inline-flex items-center rounded-full bg-zinc-100 px-2 py-0.5 text-[0.7rem] font-medium uppercase tracking-wide text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
+                        {row.platform}
+                      </span>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2 text-xs text-zinc-600 dark:text-zinc-300">
+                      {row.channel || "—"}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2 text-xs text-zinc-600 dark:text-zinc-300">
+                      {row.author_handle || "—"}
+                    </td>
+                    <td className="max-w-md px-4 py-2 text-xs">
+                      <div className="line-clamp-1 font-medium text-zinc-900 dark:text-zinc-50">
+                        {row.title || "(no title)"}
                       </div>
-                    </th>
-                    {index === 3 && (
-                      <th className="px-4 py-3 text-left font-semibold tracking-wider text-zinc-700 dark:text-zinc-300 whitespace-nowrap">
-                        Permalink
-                      </th>
-                    )}
-                  </Fragment>
+                      <div className="line-clamp-2 text-[0.7rem] text-zinc-500 dark:text-zinc-400">
+                        {truncate(row.body, 120)}
+                      </div>
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2 text-right text-xs text-zinc-700 dark:text-zinc-200">
+                      {row.relevance_score != null ? row.relevance_score.toFixed(2) : "—"}
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2 text-xs">
+                      <StatusBadge value={row.status} />
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-2 text-right text-xs">
+                      <button
+                        type="button"
+                        onClick={() => canReply && setModalRow(row)}
+                        disabled={!canReply}
+                        className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-[0.7rem] font-medium transition ${
+                          canReply
+                            ? "bg-zinc-900 text-zinc-50 hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                            : "cursor-not-allowed bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600"
+                        }`}
+                      >
+                        {canReply ? "View reply" : "No reply"}
+                      </button>
+                    </td>
+                  </tr>
                 );
               })}
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-zinc-200 text-zinc-700 dark:divide-zinc-800 dark:text-zinc-200">
-            {sortedRows.map((row) => (
-              <tr
+            </tbody>
+          </table>
+        ) : (
+          <div className="p-4 text-sm text-zinc-600 dark:text-zinc-300">
+            No rows match this filter.
+          </div>
+        )}
+      </div>
+
+      {/* Mobile cards */}
+      <div className="space-y-3 md:hidden">
+        {hasRows ? (
+          sortedRows.map((row) => {
+            const canReply = !!(row.ai_reply_draft || row.reply_text);
+
+            return (
+              <div
                 key={row.id}
-                className="odd:bg-white even:bg-zinc-50 dark:odd:bg-zinc-900 dark:even:bg-zinc-950 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                className="rounded-xl border border-zinc-200 bg-white p-3 text-xs shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
               >
-                <td className="px-4 py-3 max-w-[140px] text-left text-xs font-normal uppercase tracking-tight text-zinc-500">
-                  {formatDate(row.created_at)}
-                </td>
-                <td className="px-4 py-3 max-w-[140px] truncate">{row.status ?? "—"}</td>
-                <td className="px-4 py-3 max-w-[140px] truncate">{formatBoolean(row.should_reply)}</td>
-                <td className="px-4 py-3 max-w-[120px] truncate">{formatConfidence(row.relevance_score)}</td>
-                <td className="px-4 py-3 whitespace-nowrap">
-                  {row.permalink ? (
-                    <a
-                      href={row.permalink}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-blue-600 underline transition-colors hover:text-blue-800 dark:text-sky-300"
-                    >
-                      Link
-                    </a>
-                  ) : (
-                    "—"
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="inline-flex items-center rounded-full bg-zinc-100 px-2 py-0.5 text-[0.65rem] font-medium uppercase tracking-wide text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
+                      {row.platform}
+                    </span>
+                    {row.channel && (
+                      <span className="truncate text-[0.65rem] text-zinc-500 dark:text-zinc-400">
+                        {row.channel}
+                      </span>
+                    )}
+                  </div>
+                  <StatusBadge value={row.status} />
+                </div>
+
+                <div className="mb-2">
+                  <div className="line-clamp-2 text-[0.8rem] font-medium text-zinc-900 dark:text-zinc-50">
+                    {row.title || "(no title)"}
+                  </div>
+                  <div className="mt-1 line-clamp-3 text-[0.7rem] text-zinc-500 dark:text-zinc-400">
+                    {truncate(row.body, 140)}
+                  </div>
+                </div>
+
+                <div className="mb-2 flex items-center justify-between text-[0.65rem] text-zinc-500 dark:text-zinc-400">
+                  <span>{shortDateTime(row.created_at)}</span>
+                  {row.relevance_score != null && (
+                    <span>Score {row.relevance_score.toFixed(2)}</span>
                   )}
-                </td>
-                <td className="px-4 py-3 max-w-[320px] truncate">{row.title || "—"}</td>
-                <td className="px-4 py-3 max-w-[420px]">
-                  {row.reply_text ? (
+                </div>
+
+                <div className="flex items-center justify-between gap-2">
+                  <div className="truncate text-[0.65rem] text-zinc-500 dark:text-zinc-400">
+                    {row.author_handle || "Unknown author"}
+                  </div>
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => setModalContent(row.reply_text ?? "")}
-                      className="w-full text-left text-sm text-zinc-600 transition hover:text-zinc-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500 dark:text-zinc-300 dark:hover:text-zinc-100"
+                      onClick={() => {
+                        if (row.permalink) {
+                          window.open(row.permalink, "_blank", "noopener,noreferrer");
+                        }
+                      }}
+                      className="rounded-full bg-zinc-100 px-3 py-1 text-[0.65rem] font-medium text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
                     >
-                      <span className="block text-zinc-600 dark:text-zinc-300">{previewSnippet(row.reply_text)}</span>
+                      Open post
                     </button>
-                  ) : (
-                    "—"
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      {/* Mobile: stacked cards */}
-      <div className="sm:hidden space-y-3">
-        {sortedRows.map((row) => (
-          <div key={row.id} className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
-            <div className="flex items-center justify-between">
-              <div className="text-xs text-zinc-500">{formatDate(row.created_at)}</div>
-              <div className="text-xs font-medium text-zinc-700 dark:text-zinc-200">{row.status ?? "—"}</div>
-            </div>
-            <div className="mt-2 text-sm font-semibold text-zinc-900 dark:text-white">{row.title ?? "—"}</div>
-            <div className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">{previewSnippet(row.body ?? row.reply_text ?? "—")}</div>
-            <div className="mt-3 flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-300">
-              <div>{formatBoolean(row.should_reply)}</div>
-              <div>
-                {row.permalink ? (
-                  <a href={row.permalink} target="_blank" rel="noreferrer" className="text-blue-600 underline dark:text-sky-300">
-                    Link
-                  </a>
-                ) : (
-                  "—"
-                )}
+                    <button
+                      type="button"
+                      onClick={() => canReply && setModalRow(row)}
+                      disabled={!canReply}
+                      className={`rounded-full px-3 py-1 text-[0.65rem] font-medium ${
+                        canReply
+                          ? "bg-zinc-900 text-zinc-50 hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                          : "cursor-not-allowed bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600"
+                      }`}
+                    >
+                      {canReply ? "AI reply" : "No reply"}
+                    </button>
+                  </div>
+                </div>
               </div>
-            </div>
+            );
+          })
+        ) : (
+          <div className="rounded-xl border border-zinc-200 bg-white p-3 text-xs text-zinc-600 dark:border-zinc-800 dark:bg-zinc-950 dark:text-zinc-300">
+            No rows match this filter.
           </div>
-        ))}
+        )}
       </div>
-      {modalContent && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center px-4 py-8">
-          <button
-            type="button"
-            aria-label="Close reply preview"
-            className="fixed inset-0 bg-black/40 backdrop-blur-sm"
-            onClick={() => setModalContent(null)}
-          />
-        <div className="relative z-10 w-full max-w-2xl rounded-xl border border-zinc-200 bg-white p-6 shadow-xl shadow-zinc-400/30 dark:border-zinc-700 dark:bg-zinc-900">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Reply preview</h2>
-            <div className="flex items-center gap-2">
+
+      {/* Modal for AI reply */}
+      {modalRow && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
+          <div className="max-h-[80vh] w-full max-w-lg overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-xl dark:border-zinc-800 dark:bg-zinc-950">
+            <div className="flex items-center justify-between border-b border-zinc-200 px-4 py-3 dark:border-zinc-800">
+              <div className="space-y-0.5">
+                <h2 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                  AI reply draft
+                </h2>
+                <p className="text-[0.7rem] text-zinc-500 dark:text-zinc-400">
+                  {modalRow.platform} • {modalRow.channel || "no channel"} •{" "}
+                  {shortDateTime(modalRow.created_at)}
+                </p>
+              </div>
               <button
                 type="button"
-                className="rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium text-zinc-700 transition hover:border-zinc-500 hover:text-zinc-900 dark:border-zinc-600 dark:text-zinc-200 dark:hover:border-zinc-400 dark:hover:text-white"
-                onClick={async () => {
-                  if (!modalContent) return;
-                  try {
-                    await navigator.clipboard.writeText(modalContent);
-                    setCopyMessage("Copied reply text");
-                  } catch (err) {
-                    setCopyMessage("Copy failed");
-                  }
-                }}
-              >
-                Copy
-              </button>
-              <button
-                type="button"
-                className="text-sm font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-300 dark:hover:text-white"
-                onClick={() => setModalContent(null)}
+                onClick={() => setModalRow(null)}
+                className="rounded-full bg-zinc-100 px-2 py-1 text-xs text-zinc-500 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
               >
                 Close
               </button>
             </div>
+
+            <div className="max-h-[52vh] overflow-y-auto px-4 py-3 text-sm text-zinc-800 dark:text-zinc-100">
+              <pre className="whitespace-pre-wrap text-[0.8rem] leading-relaxed">
+                {modalRow.ai_reply_draft || modalRow.reply_text || "(No reply text found)"}
+              </pre>
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border-t border-zinc-200 px-4 py-3 text-[0.75rem] dark:border-zinc-800">
+              <div className="truncate text-zinc-500 dark:text-zinc-400">
+                {modalRow.permalink || "No permalink"}
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setModalRow(null)}
+                  className="rounded-full border border-zinc-200 px-3 py-1 text-xs font-medium text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-900"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleCopyAndOpen(modalRow)}
+                  className="rounded-full bg-zinc-900 px-3 py-1 text-xs font-medium text-zinc-50 hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                >
+                  Copy & open post
+                </button>
+              </div>
+            </div>
           </div>
-          <div className="mt-4 max-h-[70vh] overflow-y-auto rounded-lg border border-zinc-100 bg-zinc-50/80 p-4 text-sm leading-6 text-zinc-700 dark:border-zinc-800 dark:bg-zinc-950/80 dark:text-zinc-100">
-            <p className="whitespace-pre-wrap break-words">{modalContent}</p>
-          </div>
-          {copyMessage && (
-            <p className="mt-2 text-xs text-zinc-500 dark:text-zinc-400">{copyMessage}</p>
-          )}
-        </div>
         </div>
       )}
     </div>
+  );
+}
+
+/* Small reusable pieces */
+
+function FilterChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full px-3 py-1 text-[0.7rem] font-medium transition ${
+        active
+          ? "bg-zinc-900 text-zinc-50 shadow-sm dark:bg-zinc-50 dark:text-zinc-900"
+          : "bg-transparent text-zinc-600 hover:bg-zinc-200/60 dark:text-zinc-300 dark:hover:bg-zinc-700/70"
+      }`}
+    >
+      {label}
+    </button>
+  );
+}
+
+function SortableHeader({
+  label,
+  onClick,
+  active,
+  direction,
+  className,
+}: {
+  label: string;
+  onClick: () => void;
+  active: boolean;
+  direction: SortDirection;
+  className?: string;
+}) {
+  return (
+    <th className={className}>
+      <button
+        type="button"
+        onClick={onClick}
+        className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
+      >
+        <span>{label}</span>
+        <span className="text-[0.6rem]">
+          {active ? (direction === "asc" ? "▲" : "▼") : "⋮"}
+        </span>
+      </button>
+    </th>
+  );
+}
+
+function StatusBadge({ value }: { value: string }) {
+  const normalized = value.toLowerCase();
+  let bg = "bg-zinc-100 text-zinc-700";
+  if (normalized === "ready") bg = "bg-emerald-100 text-emerald-700";
+  else if (normalized === "pending") bg = "bg-amber-100 text-amber-700";
+  else if (normalized === "posted") bg = "bg-blue-100 text-blue-700";
+
+  return (
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-[0.65rem] font-medium capitalize ${bg} dark:bg-opacity-20`}
+    >
+      {value}
+    </span>
   );
 }

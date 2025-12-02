@@ -1,3 +1,4 @@
+// app/page.tsx
 import type { Metadata } from "next";
 import { createClient } from "@/utils/supabase/server";
 import SocialEngageTable from "./lab/social-engage/SocialEngageTable";
@@ -24,8 +25,13 @@ export default async function Home() {
   return (
     <div className="mx-auto max-w-6xl px-4 py-8">
       <header className="space-y-3 pb-4">
-        <h1 className="text-2xl font-semibold">Recent Social Engagement</h1>
-        <p className="text-sm text-zinc-600 dark:text-zinc-300">Quick view of the latest social_ingest rows. Filter by status (ready / others) and sort columns. Mobile friendly.</p>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Recent Social Engagement
+        </h1>
+        <p className="text-sm text-zinc-600 dark:text-zinc-300">
+          Review the latest <code className="rounded bg-zinc-100 px-1 py-0.5 text-[0.7rem] dark:bg-zinc-800">social_engage</code> rows. Filter by status
+          (Ready / Others), sort any column, and quickly inspect AI replies.
+        </p>
         {error && (
           <div className="mt-3 rounded border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
             Error loading data: {error.message}
@@ -34,10 +40,10 @@ export default async function Home() {
       </header>
 
       {rows.length === 0 && !error ? (
-        <div className="rounded border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">No engagement rows found yet.</div>
+        <div className="rounded border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
+          No engagement rows found yet.
+        </div>
       ) : (
-        // use filterMode="status" to enable status ready vs others filtering
-        // component will handle mobile layout
         <SocialEngageTable rows={rows} filterMode="status" />
       )}
     </div>
