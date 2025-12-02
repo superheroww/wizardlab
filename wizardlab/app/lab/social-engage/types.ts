@@ -3,6 +3,8 @@ export interface SocialEngageRow {
   created_at: string | null;
   platform: string | null;
   permalink: string | null;
+  author_handle: string | null;
+  channel: string | null;
   title: string | null;
   body: string | null;
   source: string | null;
@@ -21,6 +23,8 @@ export const SELECT_FIELDS = [
   "created_at",
   "platform",
   "permalink",
+  "author_handle",
+  "channel",
   "title",
   "body",
   "source",
