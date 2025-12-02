@@ -199,12 +199,6 @@ export default function SocialEngageTable({ rows, filterMode = "none" }: Props) 
                     <td className="whitespace-nowrap px-4 py-2 text-xs text-zinc-600 dark:text-zinc-300">
                       {shortDateTime(row.created_at)}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-2 text-xs text-zinc-600 dark:text-zinc-300">
-                      {row.channel || "—"}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2 text-xs text-zinc-600 dark:text-zinc-300">
-                      {row.author_handle || "—"}
-                    </td>
                     <td className="max-w-md px-4 py-2 text-xs">
                       <div className="line-clamp-1 font-medium text-zinc-900 dark:text-zinc-50">
                         {row.title || "(no title)"}
@@ -258,14 +252,7 @@ export default function SocialEngageTable({ rows, filterMode = "none" }: Props) 
                 key={row.id}
                 className="rounded-xl border border-zinc-200 bg-white p-3 text-xs shadow-sm dark:border-zinc-800 dark:bg-zinc-950"
               >
-                <div className="mb-2 flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2">
-                    {row.channel && (
-                      <span className="inline-flex items-center rounded-full bg-zinc-100 px-2 py-0.5 text-[0.65rem] font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
-                        {row.channel}
-                      </span>
-                    )}
-                  </div>
+                <div className="mb-2 flex justify-end">
                   <StatusBadge value={row.status} />
                 </div>
 
@@ -285,39 +272,30 @@ export default function SocialEngageTable({ rows, filterMode = "none" }: Props) 
                   )}
                 </div>
 
-                <div className="flex items-center justify-between gap-2">
-                  <div className="truncate text-[0.65rem] text-zinc-500 dark:text-zinc-400">
-                    {row.author_handle || "Unknown author"}
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (row.permalink) {
-                          window.open(
-                            row.permalink,
-                            "_blank",
-                            "noopener,noreferrer"
-                          );
-                        }
-                      }}
-                      className="rounded-full bg-zinc-100 px-3 py-1 text-[0.65rem] font-medium text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
-                    >
-                      Open post
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => canReply && setModalRow(row)}
-                      disabled={!canReply}
-                      className={`rounded-full px-3 py-1 text-[0.65rem] font-medium ${
-                        canReply
-                          ? "bg-zinc-900 text-zinc-50 hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
-                          : "cursor-not-allowed bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600"
-                      }`}
-                    >
-                      {canReply ? "AI reply" : "No reply"}
-                    </button>
-                  </div>
+                <div className="flex items-center justify-end gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (row.permalink) {
+                        window.open(row.permalink, "_blank", "noopener,noreferrer");
+                      }
+                    }}
+                    className="rounded-full bg-zinc-100 px-3 py-1 text-[0.65rem] font-medium text-zinc-700 hover:bg-zinc-200 dark:bg-zinc-800 dark:text-zinc-100 dark:hover:bg-zinc-700"
+                  >
+                    Open post
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => canReply && setModalRow(row)}
+                    disabled={!canReply}
+                    className={`rounded-full px-3 py-1 text-[0.65rem] font-medium ${
+                      canReply
+                        ? "bg-zinc-900 text-zinc-50 hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                        : "cursor-not-allowed bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600"
+                    }`}
+                  >
+                    {canReply ? "AI reply" : "No reply"}
+                  </button>
                 </div>
               </div>
             );
@@ -339,7 +317,6 @@ export default function SocialEngageTable({ rows, filterMode = "none" }: Props) 
                   AI reply draft
                 </h2>
                 <p className="text-[0.7rem] text-zinc-500 dark:text-zinc-400">
-                  {modalRow.channel || "no subreddit"} •{" "}
                   {shortDateTime(modalRow.created_at)}
                 </p>
               </div>
@@ -443,8 +420,9 @@ function SortableHeader({
   );
 }
 
-function StatusBadge({ value }: { value: string }) {
-  const normalized = value.toLowerCase();
+function StatusBadge({ value }: { value: string | null }) {
+  const label = value ?? "Unknown";
+  const normalized = label.toLowerCase();
   let base =
     "inline-flex items-center rounded-full px-2 py-0.5 text-[0.65rem] font-medium capitalize ";
   let variant = "bg-zinc-100 text-zinc-700";
@@ -452,5 +430,5 @@ function StatusBadge({ value }: { value: string }) {
   else if (normalized === "pending") variant = "bg-amber-100 text-amber-700";
   else if (normalized === "posted") variant = "bg-blue-100 text-blue-700";
 
-  return <span className={base + variant}>{value}</span>;
+  return <span className={base + variant}>{label}</span>;
 }

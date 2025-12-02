@@ -2,12 +2,17 @@
   "name": "wizardlab-root",
   "version": "0.1.0",
   "private": true,
-  "workspaces": ["wizardlab"],
+  "workspaces": [
+    "wizardlab"
+  ],
   "scripts": {
     "build": "npm --workspace=wizardlab run build",
     "vercel-build": "NEXT_DISABLE_LIGHTNINGCSS=1 npm run build"
   },
   "devDependencies": {
     "next": "16.0.6"
+  },
+  "dependencies": {
+    "styled-jsx": "^5.1.6"
   }
 }
