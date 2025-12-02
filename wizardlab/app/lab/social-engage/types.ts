@@ -13,6 +13,7 @@ export interface SocialEngageRow {
   status: string | null;
   posted_at: string | null;
   ai_parse_ok: boolean | null;
+  ai_reply_draft: string | null;
 }
 
 export const SELECT_FIELDS = [
@@ -30,4 +31,5 @@ export const SELECT_FIELDS = [
   "status",
   "posted_at",
   "ai_parse_ok",
+  "ai_reply_draft",
 ].join(",");
