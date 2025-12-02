@@ -162,20 +162,6 @@ export default function SocialEngageTable({ rows, filterMode = "none" }: Props) 
                   className="whitespace-nowrap px-4 py-2"
                 />
                 <SortableHeader
-                  label="Channel"
-                  onClick={() => toggleSort("channel")}
-                  active={sortConfig.key === "channel"}
-                  direction={sortConfig.direction}
-                  className="px-4 py-2"
-                />
-                <SortableHeader
-                  label="Author"
-                  onClick={() => toggleSort("author_handle")}
-                  active={sortConfig.key === "author_handle"}
-                  direction={sortConfig.direction}
-                  className="px-4 py-2"
-                />
-                <SortableHeader
                   label="Title / Body"
                   onClick={() => toggleSort("title")}
                   active={sortConfig.key === "title"}

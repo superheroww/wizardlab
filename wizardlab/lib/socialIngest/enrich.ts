@@ -18,6 +18,7 @@ interface SocialEngageRow {
   status: string | null;
   source: string | null;
   extra: ExtraPayload;
+  ai_parse_ok?: boolean | null;
 }
 
 type AiDecision = AiReplyDecision;
@@ -80,6 +81,15 @@ async function processRow(row: SocialEngageRow) {
     return;
   }
 
+  const hasSnippet = Boolean(readExtraString(row.extra, "f5bot_snippet"));
+  const hasTitle = Boolean(row.title?.trim());
+  const hasBody = Boolean(row.body?.trim());
+  if (!hasSnippet && !hasTitle && !hasBody) {
+    console.error("social_ingest: no text available for AI analysis", { id: row.id });
+    await markRowError(row, "Missing post text for AI analysis");
+    return;
+  }
+
   try {
     const aiDecision = await analyzeRowForReply(row);
     await updateRowWithAiDecision(row, aiDecision);
@@ -133,6 +143,7 @@ async function updateRowWithAiDecision(row: SocialEngageRow, decision: AiDecisio
       ai_category: decision.category,
       ai_priority: decision.priority,
       ai_reason: decision.reason,
+      ai_parse_ok: true,
       extra: { ...existingExtra, ai_metadata: metadata },
       updated_at: new Date().toISOString(),
     })
@@ -161,6 +172,7 @@ async function markRowError(row: SocialEngageRow, note: string) {
     .update({
       status: STATUS_ERROR,
       ai_result: { error: "invalid JSON", raw: note },
+      ai_parse_ok: false,
       extra: { ...existingExtra, ai_metadata: metadata },
       updated_at: new Date().toISOString(),
     })
