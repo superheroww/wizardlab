@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
 
   const platform = isNonEmptyString(payload?.platform)
     ? payload.platform.trim()
-    : "";
+    : "reddit";
   const url = isNonEmptyString(payload?.url) ? payload.url.trim() : "";
   const externalId = isNonEmptyString(payload?.external_id)
     ? payload.external_id.trim()
