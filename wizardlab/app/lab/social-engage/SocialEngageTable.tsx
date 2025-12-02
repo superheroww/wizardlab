@@ -73,9 +73,11 @@ const filterOptions: Array<{ label: string; value: "all" | "yes" | "no" }> = [
 
 interface SocialEngageTableProps {
   rows: SocialEngageRow[];
+  // control filtering mode: default is filtering by should_reply (existing behavior)
+  filterMode?: "should_reply" | "status";
 }
 
-export default function SocialEngageTable({ rows }: SocialEngageTableProps) {
+export default function SocialEngageTable({ rows, filterMode = "should_reply" }: SocialEngageTableProps) {
   const [filter, setFilter] = useState<"all" | "yes" | "no">("all");
   const [sortKey, setSortKey] = useState<SortKey>("created_at");
   const [sortDirection, setSortDirection] = useState<SortDirection>("desc");
@@ -88,11 +90,17 @@ export default function SocialEngageTable({ rows }: SocialEngageTableProps) {
 
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
+      if (filterMode === "status") {
+        if (filter === "yes") return (row.status ?? "") === "ready";
+        if (filter === "no") return (row.status ?? "") !== "ready";
+        return true;
+      }
+      // default behavior: filter by should_reply
       if (filter === "yes") return row.should_reply === true;
       if (filter === "no") return row.should_reply === false;
       return true;
     });
-  }, [rows, filter]);
+  }, [rows, filter, filterMode]);
 
   const sortedRows = useMemo(() => {
     const cloned = [...filteredRows];
@@ -116,7 +124,9 @@ export default function SocialEngageTable({ rows }: SocialEngageTableProps) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 pb-3 text-sm text-zinc-600 dark:text-white/70">
         <div className="flex items-center gap-2">
-          <span className="font-medium text-zinc-900 dark:text-white">Should reply filter:</span>
+            <span className="font-medium text-zinc-900 dark:text-white">
+            {filterMode === "status" ? "Status filter:" : "Should reply filter:"}
+          </span>
           {filterOptions.map((option) => (
             <button
               key={option.value}
@@ -128,7 +138,7 @@ export default function SocialEngageTable({ rows }: SocialEngageTableProps) {
                   : "border-zinc-300 bg-white text-zinc-600 hover:border-zinc-500 dark:border-zinc-700 dark:bg-zinc-800 dark:text-white"
               }`}
             >
-              {option.label}
+              {filterMode === "status" && option.value === "yes" ? "Ready" : option.label}
             </button>
           ))}
         </div>
@@ -137,8 +147,9 @@ export default function SocialEngageTable({ rows }: SocialEngageTableProps) {
         </p>
       </div>
 
-      <div className="overflow-x-auto rounded border border-zinc-200 bg-white/60 shadow-lg shadow-zinc-200/40 dark:border-zinc-700 dark:bg-zinc-950/50">
-        <table className="w-full min-w-[780px] divide-y divide-zinc-200 dark:divide-zinc-800 text-left text-sm">
+      {/* Desktop / wide screens: table */}
+      <div className="hidden sm:block overflow-x-auto rounded border border-zinc-200 bg-white/60 shadow-lg shadow-zinc-200/40 dark:border-zinc-700 dark:bg-zinc-950/50">
+        <table className="w-full divide-y divide-zinc-200 dark:divide-zinc-800 text-left text-sm">
           <thead className="bg-zinc-100/90 text-[0.7rem] uppercase tracking-wide text-zinc-600 dark:bg-zinc-900/60 dark:text-zinc-300">
             <tr>
               {SORTABLE_COLUMNS.map((column, index) => {
@@ -214,6 +225,31 @@ export default function SocialEngageTable({ rows }: SocialEngageTableProps) {
             ))}
           </tbody>
         </table>
+      </div>
+      {/* Mobile: stacked cards */}
+      <div className="sm:hidden space-y-3">
+        {sortedRows.map((row) => (
+          <div key={row.id} className="rounded-lg border border-zinc-200 bg-white p-3 dark:border-zinc-700 dark:bg-zinc-900">
+            <div className="flex items-center justify-between">
+              <div className="text-xs text-zinc-500">{formatDate(row.created_at)}</div>
+              <div className="text-xs font-medium text-zinc-700 dark:text-zinc-200">{row.status ?? "—"}</div>
+            </div>
+            <div className="mt-2 text-sm font-semibold text-zinc-900 dark:text-white">{row.title ?? "—"}</div>
+            <div className="mt-1 text-sm text-zinc-600 dark:text-zinc-300">{previewSnippet(row.body ?? row.reply_text ?? "—")}</div>
+            <div className="mt-3 flex items-center justify-between text-xs text-zinc-600 dark:text-zinc-300">
+              <div>{formatBoolean(row.should_reply)}</div>
+              <div>
+                {row.permalink ? (
+                  <a href={row.permalink} target="_blank" rel="noreferrer" className="text-blue-600 underline dark:text-sky-300">
+                    Link
+                  </a>
+                ) : (
+                  "—"
+                )}
+              </div>
+            </div>
+          </div>
+        ))}
       </div>
       {modalContent && (
         <div className="fixed inset-0 z-50 flex items-start justify-center px-4 py-8">
