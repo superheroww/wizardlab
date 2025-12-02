@@ -1,10 +1,12 @@
-import { openai, MODELS } from "@/tools/utils/openai";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { analyzeForReply, AiReplyDecision } from "@/tools/reddit/reply/analyzeForReply";
 
 const BATCH_SIZE = Number(process.env.SOCIAL_INGEST_BATCH_SIZE ?? "5");
 const STATUS_PENDING = "pending";
 const STATUS_READY = "ready";
-const STATUS_UNRESOLVABLE = "unresolvable";
+const STATUS_IGNORED = "ignored";
+const STATUS_ERROR = "error";
+
 type ExtraPayload = Record<string, unknown> | null;
 
 interface SocialEngageRow {
@@ -18,15 +20,28 @@ interface SocialEngageRow {
   extra: ExtraPayload;
 }
 
-type AiRedditPost = {
-  title: string;
-  post_text: string;
-  url: string;
-  subreddit?: string | null;
-  author?: string | null;
-  created_at?: string | null;
-  note?: string | null;
-};
+type AiDecision = AiReplyDecision;
+
+const SYSTEM_MESSAGE = `
+You are an assistant helping a small fintech product (WizardFolio) decide whether to reply to Reddit content and how to reply when it makes sense.
+
+- The product: WizardFolio = a free ETF look-through and portfolio visualization tool.
+- Audience: retail investors (beginners or intermediates) asking about portfolios, ETFs, asset allocation, and underlying exposure.
+
+Your job:
+1. Understand what the Reddit author is asking or talking about.
+2. Decide if WizardFolio should reply.
+3. If yes, draft a SHORT (2–4 sentence), friendly, non-pushy reply that mentions WizardFolio as a resource when natural.
+
+Important rules:
+- Do NOT give personalized financial advice (“you should buy/sell”, specific allocations, etc.).
+- Avoid politics, off-topic chatter, insults, or spammy language.
+- Tone: kind, concise, and helpful with no emojis.
+- Respect subreddit norms and reply only when WizardFolio is a natural fit.
+- If the post is not about portfolios, ETFs, or an underlying holdings question, do NOT reply.
+
+Respond ONLY with valid JSON matching the requested schema.
+`.trim();
 
 export async function enrichPendingSocialIngest(): Promise<number> {
   const rows = await fetchPendingRedditRows();
@@ -61,187 +76,128 @@ async function processRow(row: SocialEngageRow) {
   const permalink = row.permalink;
   if (!permalink) {
     console.error("social_ingest: missing permalink for reddit row", { id: row.id });
-    await markUnresolvable(row, "Missing permalink");
+    await markRowError(row, "Missing permalink");
     return;
   }
 
   try {
-    const resolved = await resolveRedditPostWithAI(row, permalink);
-    if (!resolved.post_text.trim() && !resolved.title.trim()) {
-      await markUnresolvable(row, resolved.note ?? "OpenAI returned no title or post_text");
-      return;
-    }
-
-    await updateRowWithAiPayload(row, resolved, STATUS_READY);
+    const aiDecision = await analyzeRowForReply(row);
+    await updateRowWithAiDecision(row, aiDecision);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error("social_ingest: failed to enrich Reddit post", {
-      id: row.id,
-      error: message,
-    });
-    await addErrorNote(row, message);
+    console.error(`social_ingest: AI error for row ${row.id}: ${message}`);
+    await markRowError(row, message);
   }
 }
 
-function buildContext(row: SocialEngageRow) {
-  const extra = row.extra ?? {};
-  const contextParts: string[] = [];
-  if (typeof extra["f5bot_subject"] === "string" && extra["f5bot_subject"].trim()) {
-    contextParts.push(`F5Bot subject: ${extra["f5bot_subject"].trim()}`);
-  }
-  if (typeof extra["f5bot_snippet"] === "string" && extra["f5bot_snippet"].trim()) {
-    contextParts.push(`F5Bot snippet: ${extra["f5bot_snippet"].trim()}`);
-  }
-  return contextParts.length ? contextParts.join("\n") : "No additional context available.";
-}
+async function analyzeRowForReply(row: SocialEngageRow): Promise<AiDecision> {
+  const snippet = trimSnippet(
+    readExtraString(row.extra, "f5bot_snippet"),
+    1024
+  );
+  const subject = readExtraString(row.extra, "f5bot_subject");
 
-async function resolveRedditPostWithAI(row: SocialEngageRow, permalink: string): Promise<AiRedditPost> {
-  const context = buildContext(row);
-  const systemMessage =
-    "You are an assistant with browser access. Your job is to open the provided Reddit post URL, read the original post, " +
-    "and return the post metadata as JSON. Do not include comments or replies.";
-  const userMessage = `You are reading a Reddit post.
-URL: ${permalink}
-${context}
-Return a JSON object with the keys:
-- title: the human-readable post title.
-- post_text: the body text of the original post, no comments.
-- url: the canonical URL that you visited.
-- subreddit: the subreddit name if available.
-- author: the author handle if available.
-- created_at: ISO timestamp when the post was created, or an empty string if unknown.
-- note: include a short explanation if the post cannot be reached or parsed.
-If you cannot access the post, return title and post_text as empty strings and explain why in the note field.`;
-
-  const completion = await openai.chat.completions.create({
-    model: MODELS.ingest,
-    temperature: 0,
-    messages: [
-      { role: "system", content: systemMessage },
-      { role: "user", content: userMessage },
-    ],
-    response_format: { type: "json_object" },
-  });
-
-  const raw = completion.choices?.[0]?.message?.content?.toString().trim();
-  if (!raw) {
-    throw new Error("OpenAI returned an empty response.");
-  }
-
-  const parsed = parseJsonSafely<AiRedditPost>(raw);
-  if (!parsed) {
-    throw new Error("Failed to parse JSON from OpenAI response.");
-  }
-
-  return {
-    title: parsed.title ?? "",
-    post_text: parsed.post_text ?? "",
-    url: parsed.url ?? permalink,
-    subreddit: parsed.subreddit ?? null,
-    author: parsed.author ?? null,
-    created_at: parsed.created_at ?? null,
-    note: parsed.note ?? null,
-  };
-}
-
-function parseJsonSafely<T>(raw: string): T | null {
   try {
-    return JSON.parse(raw) as T;
-  } catch {
-    const start = raw.indexOf("{");
-    const end = raw.lastIndexOf("}");
-    if (start >= 0 && end > start) {
-      try {
-        return JSON.parse(raw.slice(start, end + 1)) as T;
-      } catch {
-        return null;
-      }
-    }
-    return null;
+    const aiDecision = await analyzeForReply({
+      postTitle: row.title,
+      postBody: row.body,
+      url: row.permalink ?? "",
+      subject,
+      snippet,
+    });
+    return aiDecision;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(`Failed to analyze row with AI: ${message}`);
   }
 }
 
-async function updateRowWithAiPayload(row: SocialEngageRow, payload: AiRedditPost, status: string) {
+async function updateRowWithAiDecision(row: SocialEngageRow, decision: AiDecision) {
+  const status = decision.should_reply ? STATUS_READY : STATUS_IGNORED;
   const existingExtra = ensureExtraObject(row.extra);
-  const aiMetadata = {
+  const metadata = {
     last_run_at: new Date().toISOString(),
     status,
-    payload,
+    reason: decision.reason,
+    priority: decision.priority,
+    category: decision.category,
   };
+
   const { error } = await supabaseAdmin
     .from("social_engage")
     .update({
-      title: payload.title || row.title,
-      body: payload.post_text || row.body,
       status,
-      extra: { ...existingExtra, ai_metadata: aiMetadata },
+      ai_result: decision,
+      ai_should_reply: decision.should_reply,
+      ai_reply_draft: decision.reply_draft,
+      ai_category: decision.category,
+      ai_priority: decision.priority,
+      ai_reason: decision.reason,
+      extra: { ...existingExtra, ai_metadata: metadata },
+      updated_at: new Date().toISOString(),
     })
     .eq("id", row.id);
 
   if (error) {
-    console.error("social_ingest: failed to update enriched Reddit row", {
+    console.error("social_ingest: failed to persist AI decision", {
       id: row.id,
       error: error.message,
     });
   } else {
-    console.info("social_ingest: enriched reddit row", {
-      id: row.id,
-      url: payload.url,
-      title: payload.title,
-    });
+    console.info(`social_ingest: ai decision row ${row.id} status=${status}`);
   }
 }
 
-async function markUnresolvable(row: SocialEngageRow, reason: string) {
+async function markRowError(row: SocialEngageRow, note: string) {
   const existingExtra = ensureExtraObject(row.extra);
-  const aiMetadata = {
+  const metadata = {
     last_run_at: new Date().toISOString(),
-    status: STATUS_UNRESOLVABLE,
-    note: reason,
-  };
-
-  const { error } = await supabaseAdmin
-    .from("social_engage")
-    .update({
-      status: STATUS_UNRESOLVABLE,
-      extra: { ...existingExtra, ai_metadata: aiMetadata },
-    })
-    .eq("id", row.id);
-
-  if (error) {
-    console.error("social_ingest: failed to mark reddit row unresolvable", {
-      id: row.id,
-      error: error.message,
-    });
-  } else {
-    console.info("social_ingest: marked reddit row unresolvable", {
-      id: row.id,
-      reason,
-    });
-  }
-}
-
-async function addErrorNote(row: SocialEngageRow, note: string) {
-  const existingExtra = ensureExtraObject(row.extra);
-  const aiMetadata = {
-    last_run_at: new Date().toISOString(),
-    status: "error",
+    status: STATUS_ERROR,
     note,
   };
 
   const { error } = await supabaseAdmin
     .from("social_engage")
     .update({
-      extra: { ...existingExtra, ai_metadata: aiMetadata },
+      status: STATUS_ERROR,
+      ai_result: { error: "invalid JSON", raw: note },
+      extra: { ...existingExtra, ai_metadata: metadata },
+      updated_at: new Date().toISOString(),
     })
     .eq("id", row.id);
 
   if (error) {
-    console.error("social_ingest: failed to record error metadata", {
+    console.error("social_ingest: failed to mark reddit row error", {
       id: row.id,
       error: error.message,
     });
   }
+}
+
+function trimSnippet(value: string | null, maxLength: number): string {
+  if (!value) {
+    return "";
+  }
+
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  return trimmed.length <= maxLength
+    ? trimmed
+    : `${trimmed.slice(0, maxLength).trim()}...`;
+}
+
+function readExtraString(extra: ExtraPayload, key: string): string | null {
+  if (!extra || typeof extra !== "object") {
+    return null;
+  }
+  const value = extra[key];
+  if (typeof value === "string" && value.trim()) {
+    return value.trim();
+  }
+  return null;
 }
 
 function ensureExtraObject(value: ExtraPayload): Record<string, unknown> {
