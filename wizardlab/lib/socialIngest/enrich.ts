@@ -15,6 +15,7 @@ interface SocialEngageRow {
   permalink: string | null;
   title: string | null;
   body: string | null;
+  ai_input?: string | null;
   status: string | null;
   source: string | null;
   extra: ExtraPayload;
@@ -60,7 +61,7 @@ export async function enrichPendingSocialIngest(): Promise<number> {
 async function fetchPendingRedditRows(): Promise<SocialEngageRow[]> {
   const { data, error } = await supabaseAdmin
     .from("social_engage")
-    .select("id, platform, permalink, title, body, status, source, extra")
+    .select("id, platform, permalink, title, body, status, source, extra, ai_input")
     .eq("platform", "reddit")
     .eq("status", STATUS_PENDING)
     .order("created_at", { ascending: true })
@@ -90,8 +91,29 @@ async function processRow(row: SocialEngageRow) {
     return;
   }
 
+  const hydratedBody = (
+    (row.extra as { hydrated?: { full_body?: string } } | null)?.hydrated
+  )?.full_body;
+  const fallback = (row.body || row.title || "").trim();
+  const finalInput = (hydratedBody?.trim() || fallback);
+
+  const { error: inputError } = await supabaseAdmin
+    .from("social_engage")
+    .update({
+      ai_input: finalInput,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", row.id);
+
+  if (inputError) {
+    console.error("social_ingest: failed to persist ai_input", {
+      id: row.id,
+      error: inputError.message,
+    });
+  }
+
   try {
-    const aiDecision = await analyzeRowForReply(row);
+    const aiDecision = await analyzeRowForReply(row, finalInput);
     await updateRowWithAiDecision(row, aiDecision);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -100,7 +122,10 @@ async function processRow(row: SocialEngageRow) {
   }
 }
 
-async function analyzeRowForReply(row: SocialEngageRow): Promise<AiDecision> {
+async function analyzeRowForReply(
+  row: SocialEngageRow,
+  finalInput: string
+): Promise<AiDecision> {
   const snippet = trimSnippet(
     readExtraString(row.extra, "f5bot_snippet"),
     1024
@@ -110,7 +135,7 @@ async function analyzeRowForReply(row: SocialEngageRow): Promise<AiDecision> {
   try {
     const aiDecision = await analyzeForReply({
       postTitle: row.title,
-      postBody: row.body,
+      postBody: finalInput,
       url: row.permalink ?? "",
       subject,
       snippet,

@@ -83,20 +83,30 @@ export default function SocialEngageTable({ rows, filterMode = "none" }: Props) 
     });
   }
 
-  async function handleCopyAndOpen(row: SocialEngageRow) {
+  async function handlePost(row: SocialEngageRow) {
     const text = row.ai_reply_draft || row.reply_text || "";
     if (!text) return;
 
     try {
       await navigator.clipboard.writeText(text);
     } catch (err) {
-      console.error("Failed to copy:", err);
+      console.error("Failed to copy reply text", err);
     }
 
     setModalRow(null);
 
     if (row.permalink) {
       window.open(row.permalink, "_blank", "noopener,noreferrer");
+    }
+
+    try {
+      await fetch("/api/social/mark-posted", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: row.id }),
+      });
+    } catch (err) {
+      console.error("Failed to mark row as posted", err);
     }
   }
 
@@ -216,18 +226,29 @@ export default function SocialEngageTable({ rows, filterMode = "none" }: Props) 
                       <StatusBadge value={row.status} />
                     </td>
                     <td className="whitespace-nowrap px-4 py-2 text-right text-xs">
-                      <button
-                        type="button"
-                        onClick={() => canReply && setModalRow(row)}
-                        disabled={!canReply}
-                        className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-[0.7rem] font-medium transition ${
-                          canReply
-                            ? "bg-zinc-900 text-zinc-50 hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
-                            : "cursor-not-allowed bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600"
-                        }`}
-                      >
-                        {canReply ? "View reply" : "No reply"}
-                      </button>
+                      <div className="flex items-center justify-end gap-2">
+                        {row.status?.toLowerCase() === "ready" && canReply && (
+                          <button
+                            type="button"
+                            onClick={() => handlePost(row)}
+                            className="inline-flex items-center justify-center rounded-full px-3 py-1 text-[0.7rem] font-medium bg-zinc-900 text-zinc-50 hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                          >
+                            Post
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => canReply && setModalRow(row)}
+                          disabled={!canReply}
+                          className={`inline-flex items-center justify-center rounded-full px-3 py-1 text-[0.7rem] font-medium transition ${
+                            canReply
+                              ? "bg-zinc-900 text-zinc-50 hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                              : "cursor-not-allowed bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-600"
+                          }`}
+                        >
+                          {canReply ? "View reply" : "No reply"}
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -246,6 +267,7 @@ export default function SocialEngageTable({ rows, filterMode = "none" }: Props) 
         {hasRows ? (
           sortedRows.map((row) => {
             const canReply = !!(row.ai_reply_draft || row.reply_text);
+            const isReady = row.status?.toLowerCase() === "ready";
 
             return (
               <div
@@ -284,6 +306,15 @@ export default function SocialEngageTable({ rows, filterMode = "none" }: Props) 
                   >
                     Open post
                   </button>
+                  {isReady && canReply && (
+                    <button
+                      type="button"
+                      onClick={() => handlePost(row)}
+                      className="rounded-full px-3 py-1 text-[0.65rem] font-medium bg-zinc-900 text-zinc-50 hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                    >
+                      Post
+                    </button>
+                  )}
                   <button
                     type="button"
                     onClick={() => canReply && setModalRow(row)}
@@ -351,10 +382,10 @@ export default function SocialEngageTable({ rows, filterMode = "none" }: Props) 
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleCopyAndOpen(modalRow)}
+                  onClick={() => handlePost(modalRow)}
                   className="rounded-full bg-zinc-900 px-3 py-1 text-xs font-medium text-zinc-50 hover:bg-zinc-800 dark:bg-zinc-50 dark:text-zinc-900 dark:hover:bg-zinc-200"
                 >
-                  Copy & open post
+                  Post
                 </button>
               </div>
             </div>
