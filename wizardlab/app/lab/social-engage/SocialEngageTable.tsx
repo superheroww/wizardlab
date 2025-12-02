@@ -33,9 +33,9 @@ export default function SocialEngageTable({ rows, filterMode = "none" }: Props) 
 
     if (filterMode === "status") {
       if (statusFilter === "ready") {
-        current = current.filter((row) => row.status.toLowerCase() === "ready");
+        current = current.filter((row) => row.status?.toLowerCase() === "ready");
       } else if (statusFilter === "others") {
-        current = current.filter((row) => row.status.toLowerCase() !== "ready");
+        current = current.filter((row) => row.status?.toLowerCase() !== "ready");
       }
     }
 
