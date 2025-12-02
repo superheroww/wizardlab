@@ -1,15 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { resolveRedditPostFromUrl } from "@/tools/reddit/resolveRedditPostFromUrl";
+import {
+  resolveRedditPostFromUrl,
+  SocialIngestPayload,
+} from "@/tools/reddit/resolveRedditPostFromUrl";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
-
-type SocialIngestPayload = {
-  platform?: unknown;
-  source?: unknown;
-  url?: unknown;
-};
 
 const isNonEmptyString = (value: unknown): value is string =>
   typeof value === "string" && value.trim().length > 0;
@@ -27,9 +24,10 @@ export async function POST(req: NextRequest) {
     ? payload.platform.trim()
     : "";
   const url = isNonEmptyString(payload?.url) ? payload.url.trim() : "";
-  const sourceValue = isNonEmptyString(payload?.source)
-    ? payload.source.trim()
-    : "gmail-f5bot";
+  const externalId = isNonEmptyString(payload?.external_id)
+    ? payload.external_id.trim()
+    : null;
+  const hasSnippet = isNonEmptyString(payload?.f5bot_snippet);
 
   if (!platform || !url) {
     return NextResponse.json(
@@ -45,9 +43,15 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  console.log("social_ingest: ingesting reddit from gmail-f5bot", {
+    url,
+    external_id: externalId,
+    hasSnippet,
+  });
+
   let resolvedPost;
   try {
-    resolvedPost = await resolveRedditPostFromUrl(url);
+    resolvedPost = resolveRedditPostFromUrl(payload);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("social_ingest: failed to resolve Reddit post", {
@@ -60,33 +64,28 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (!resolvedPost) {
-    console.error("social_ingest: could not resolve Reddit post", { url });
-    return NextResponse.json(
-      { status: "ignored", reason: "unresolvable_reddit_post" },
-      { status: 200 }
-    );
-  }
+  const canonicalUrl = resolvedPost.canonical_url ?? url;
 
-  console.info("social_ingest: resolved reddit post", {
-    url,
+  console.info("social_ingest: resolved reddit metadata", {
+    canonicalUrl,
     title: resolvedPost.title,
     bodyPreview: resolvedPost.body ? resolvedPost.body.slice(0, 120) : null,
   });
 
   const extra = {
-    ...(resolvedPost.extra ?? {}),
-    raw_reddit_url: url,
-    raw_reddit_source: sourceValue,
+    raw_reddit_url: canonicalUrl,
+    raw_reddit_source: resolvedPost.source,
+    f5bot_subject: resolvedPost.title,
+    f5bot_snippet: resolvedPost.body,
   };
 
   const insertResponse = await supabaseAdmin.from("social_engage").insert({
-    platform: "reddit",
-    external_post_id: resolvedPost.externalPostId,
+    platform: resolvedPost.platform,
+    external_post_id: resolvedPost.external_id,
     external_comment_id: null,
-    permalink: resolvedPost.permalink,
-    author_handle: resolvedPost.author,
-    channel: resolvedPost.subreddit,
+    permalink: canonicalUrl,
+    author_handle: null,
+    channel: null,
     title: resolvedPost.title,
     body: resolvedPost.body,
     classifier_model: null,
@@ -98,7 +97,7 @@ export async function POST(req: NextRequest) {
     status: "pending",
     posted_at: null,
     posted_by: null,
-    source: sourceValue,
+    source: resolvedPost.source,
     extra,
   });
 
@@ -114,16 +113,16 @@ export async function POST(req: NextRequest) {
   }
 
   console.info("social_ingest: inserted Reddit post", {
-    platform,
-    external_post_id: resolvedPost.externalPostId,
-    source: sourceValue,
+    platform: resolvedPost.platform,
+    external_post_id: resolvedPost.external_id,
+    source: resolvedPost.source,
   });
 
   return NextResponse.json(
     {
       status: "ok",
       platform,
-      external_post_id: resolvedPost.externalPostId,
+      external_post_id: resolvedPost.external_id,
     },
     { status: 200 }
   );
