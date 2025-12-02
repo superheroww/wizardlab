@@ -2,7 +2,7 @@
 
 WizardLab is an internal Next.js (App Router) + Supabase experiment that helps the WizardFolio team monitor Reddit conversations and semi-automate AI-generated replies. The project centers around a `social_engage` dashboard that lists posts, previews drafts, and lets operators quickly copy/post responses.
 
-## Development
+## Developmen
 
 ```bash
 npm install
