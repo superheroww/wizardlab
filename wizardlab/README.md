@@ -1,36 +1,60 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+﻿# WizardLab
 
-## Getting Started
+WizardLab is an internal Next.js (App Router) + Supabase experiment that helps the WizardFolio team monitor Reddit conversations and semi-automate AI-generated replies. The project centers around a `social_engage` dashboard that lists posts, previews drafts, and lets operators quickly copy/post responses.
 
-First, run the development server:
+## Development
 
 ```bash
+npm install
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+App router pages live under `app/`, API routes under `app/api`, and shared logic is inside `lib/` and `tools/`.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+### Env requirements
 
-This project defines its own CSS variables for system fonts directly in `app/globals.css`, so the build doesn’t download fonts from Google during deployment.
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- (Optional) `SOCIAL_INGEST_BATCH_SIZE` affects the enrichment cron batching.
 
-## Learn More
+## Key workflows
 
-To learn more about Next.js, take a look at the following resources:
+### Social Engage dashboard
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Located at `app/lab/social-engage/SocialEngageTable.tsx`, this client component:
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+- Lists Reddit rows with filters, sorting, and statuses.
+- Shows AI replies in a modal and copies text to the clipboard.
+- Adds a **Post** button for rows with `status = "ready"` so operators can:
+  1. Copy the AI-generated reply.
+  2. Open the Reddit permalink in a new tab.
+  3. Hit `POST` to persist `status = "posted"`/`posted_at` via the new `/api/social/mark-posted` route.
 
-## Deploy on Vercel
+The modal footer and mobile cards share the same behavior to keep the UI consistent.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### API route
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `POST /api/social/mark-posted` (App Router handler)
+  - Accepts `{ id }` in the JSON body.
+  - Updates the corresponding `social_engage` row with `status = "posted"`, `posted_at`, `posted_by = "lab-dashboard"`, and `updated_at`.
+  - Returns `{ success: true }` or `{ error }` on failure.
+
+Use this endpoint only from the internal dashboard — no auth is enforced yet.
+
+### Enrichment pipeline
+
+`lib/socialIngest/enrich.ts` powers the cron that hydrates Reddit rows and routes them through OpenAI:
+
+- Selects pending Reddit rows (`status = "pending"`) from `social_engage`.
+- Hydrates the body when available (via `row.extra.hydrated.full_body`) and falls back to `body` or `title`.
+- Saves the exact text fed to OpenAI into `ai_input` before constructing the prompt.
+- Passes that same text into `analyzeForReply`, so stored `ai_input` mirrors what the model saw.
+- Persists the resulting decision (`ai_reply_draft`, `ai_should_reply`, etc.) without touching cron logic or the schema.
+
+This makes auditing easier because each row records the precise classifier input while keeping `ai_parse_ok` behavior untouched.
+
+## Testing
+
+- `npm run lint`
+
+Automated tests are not included yet.
