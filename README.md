@@ -14,7 +14,7 @@ Project sources live under `wizardlab/app/` (UI + API routes), `wizardlab/lib/` 
 
 - `SUPABASE_URL` & `SUPABASE_SERVICE_ROLE_KEY`: needed for both web UI and enrichment cron jobs.
 - `OPENAI_API_KEY`, `OPENAI_MODEL_CLASSIFIER`, `OPENAI_MODEL_REPLY`: drive the classifier + reply prompts.
-- `SOCIAL_INGEST_BATCH_SIZE` (optional): controls how many pending rows the enrichment cron processe each run.
+- `SOCIAL_INGEST_BATCH_SIZE` (optional): controls how many pending rows the enrichment cron process each run.
 
 ## Core flows
 
