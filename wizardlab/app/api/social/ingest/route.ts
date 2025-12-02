@@ -68,6 +68,12 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  console.info("social_ingest: resolved reddit post", {
+    url,
+    title: resolvedPost.title,
+    bodyPreview: resolvedPost.body ? resolvedPost.body.slice(0, 120) : null,
+  });
+
   const extra = {
     ...(resolvedPost.extra ?? {}),
     raw_reddit_url: url,

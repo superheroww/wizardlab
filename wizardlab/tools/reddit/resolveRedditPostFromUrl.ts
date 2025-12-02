@@ -1,5 +1,5 @@
 const BASE_REDDIT_URL = "https://www.reddit.com";
-const USER_AGENT = "wizardlab-bot/0.1 (contact: https://wizardfolio.com)";
+const USER_AGENT = "Mozilla/5.0 (compatible; WizardLabBot/0.1; +https://wizardfolio.com)";
 
 export type ResolvedRedditPost = {
   externalPostId: string;
@@ -51,9 +51,82 @@ function extractPostInfo(hostname: string, segments: string[]) {
   return { postId: null, subreddit: null };
 }
 
-function buildJsonUrl(baseUrl: string) {
-  const withoutJson = baseUrl.replace(/\.json$/i, "");
-  return `${withoutJson}.json?raw_json=1`;
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function decodeHtmlEntities(value: string) {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ");
+}
+
+function normalizeText(value: string | null | undefined) {
+  if (!value) {
+    return null;
+  }
+
+  const decoded = decodeHtmlEntities(value);
+  const withoutScripts = decoded.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, " ");
+  const withoutTags = withoutScripts.replace(/<[^>]+>/g, " ");
+  const collapsed = withoutTags.replace(/\s+/g, " ").trim();
+  return collapsed || null;
+}
+
+function firstNonEmpty(...values: Array<string | null | undefined>) {
+  for (const value of values) {
+    const normalized = normalizeText(value);
+    if (normalized) {
+      return normalized;
+    }
+  }
+  return null;
+}
+
+function extractMetaContent(
+  html: string,
+  attribute: "property" | "name",
+  attributeValue: string
+) {
+  const regex = new RegExp(
+    `<meta[^>]*${attribute}=(?:\"|')${escapeRegExp(attributeValue)}(?:\"|')[^>]*>`,
+    "i"
+  );
+  const match = regex.exec(html);
+  if (!match) {
+    return null;
+  }
+
+  const contentMatch = /content=(?:\"|')([^\"'>]+)/i.exec(match[0]);
+  return contentMatch ? contentMatch[1] : null;
+}
+
+function extractTextBlock(html: string) {
+  const match = /<div[^>]+data-click-id=(?:\"|')text(?:\"|')[^>]*>([\s\S]*?)<\/div>/i.exec(
+    html
+  );
+  return match ? match[1] : null;
+}
+
+function extractTitleFromHtml(html: string) {
+  return firstNonEmpty(
+    extractMetaContent(html, "property", "og:title"),
+    extractMetaContent(html, "name", "twitter:title"),
+    /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1] ?? null,
+    /<h1[^>]*>([\s\S]*?)<\/h1>/i.exec(html)?.[1] ?? null
+  );
+}
+
+function extractBodyFromHtml(html: string) {
+  return firstNonEmpty(
+    extractMetaContent(html, "property", "og:description"),
+    extractMetaContent(html, "name", "description"),
+    extractTextBlock(html)
+  );
 }
 
 export async function resolveRedditPostFromUrl(
@@ -100,12 +173,11 @@ export async function resolveRedditPostFromUrl(
     return null;
   }
 
-  const jsonUrl = buildJsonUrl(withoutTrailingSlash);
-
-  const response = await fetch(jsonUrl, {
+  const fetchUrl = normalizedUrl.href;
+  const response = await fetch(fetchUrl, {
     cache: "no-store",
     headers: {
-      Accept: "application/json",
+      Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
       "User-Agent": USER_AGENT,
     },
   });
@@ -115,72 +187,48 @@ export async function resolveRedditPostFromUrl(
       console.error("social_ingest: reddit post not accessible", {
         status: response.status,
         canonicalUrl,
-        jsonUrl,
+        fetchUrl,
       });
       return null;
     }
-    throw new Error(`Failed to fetch Reddit JSON (${response.status}): ${jsonUrl}`);
+
+    throw new Error(`Failed to fetch reddit HTML (${response.status}): ${fetchUrl}`);
   }
 
-  const payload = (await response.json()) as unknown;
-  if (!Array.isArray(payload)) {
-    console.error("social_ingest: unexpected Reddit JSON structure", {
+  const html = await response.text();
+  const title = extractTitleFromHtml(html);
+  const body = extractBodyFromHtml(html);
+
+  if (!title) {
+    console.error("social_ingest: could not extract Reddit title from HTML", {
       canonicalUrl,
-      jsonUrl,
+      fetchUrl,
     });
     return null;
   }
 
-  const postListing = payload[0]?.data?.children?.find(
-    (child: any) => child?.kind === "t3"
-  );
-  const postData = postListing?.data;
-  if (!postData) {
-    console.error("social_ingest: unexpected Reddit JSON structure", {
-      canonicalUrl,
-      jsonUrl,
-    });
-    return null;
-  }
-
-  const permalinkValue =
-    typeof postData.permalink === "string" ? postData.permalink : null;
+  const permalinkValue = segments.length
+    ? normalizedUrl.pathname
+    : undefined;
   const fallbackPermalink = normalizedUrl.pathname
     ? `${BASE_REDDIT_URL}${ensureTrailingSlash(normalizedUrl.pathname)}`
     : BASE_REDDIT_URL;
-  const formattedPermalink =
-    permalinkValue && permalinkValue.length
-      ? permalinkValue.startsWith("http")
-        ? ensureTrailingSlash(permalinkValue)
-        : ensureTrailingSlash(`${BASE_REDDIT_URL}${permalinkValue}`)
-      : fallbackPermalink;
+  const formattedPermalink = permalinkValue
+    ? `${BASE_REDDIT_URL}${ensureTrailingSlash(normalizedUrl.pathname)}`
+    : fallbackPermalink;
 
   return {
-    externalPostId: String(postData.id),
+    externalPostId: postId,
     permalink: formattedPermalink,
-    title:
-      typeof postData.title === "string" ? postData.title.trim() || null : null,
-    body:
-      typeof postData.selftext === "string"
-        ? postData.selftext.trim() || null
-        : null,
-    author: typeof postData.author === "string" ? postData.author : null,
-    subreddit:
-      typeof postData.subreddit === "string"
-        ? postData.subreddit
-        : subreddit ?? null,
+    title,
+    body,
+    author: null,
+    subreddit: subreddit ?? null,
     extra: {
       normalized_url: withoutTrailingSlash,
       raw_canonical_url: canonicalUrl,
       subreddit_from_url: subreddit,
       post_id_from_url: postId,
-      ups: typeof postData.ups === "number" ? postData.ups : null,
-      num_comments:
-        typeof postData.num_comments === "number"
-          ? postData.num_comments
-          : null,
-      created_utc:
-        typeof postData.created_utc === "number" ? postData.created_utc : null,
     },
   };
 }
