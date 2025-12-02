@@ -10,7 +10,7 @@
     "lint": "eslint",
     "test:classifier": "ts-node scripts/testClassifier.ts",
     "test:reply": "ts-node scripts/testReply.ts",
-    "social-ingest:consume": "ts-node scripts/socialIngestConsumer.ts"
+    "social-ingest:consume": "ts-node-esm scripts/socialIngestConsumer.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.86.0",
