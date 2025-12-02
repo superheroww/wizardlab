@@ -1,29 +1,47 @@
-# wizardlab
+# WizardLab
 
-This repo is the backend and tooling home for wizardLab, a Next.js App Router + Supabase toolbox that automates engagement across platforms like Reddit, TikTok, X, and YouTube using AI-powered micro-agents. The AI system is composed of data ingestion hooks, classifier logic, and reply generation helpers that together decide which items to reply to and what to say while keeping Supabase as the durable source of truth.
+WizardLab is the internal Next.js (App Router) + Supabase workspace powering semi-automated AI replies to Reddit threads and other social platforms. The repo mixes UI tooling, cron jobs, and OpenAI helpers so operators can triage incoming posts, inspect AI drafts, and launch replies with a single click.
 
 ## Quick start
-1. Copy `.env.local.example` to `.env.local` and fill in the Supabase and OpenAI keys/models (`OPENAI_API_KEY`, `OPENAI_MODEL_CLASSIFIER`, `OPENAI_MODEL_REPLY`).
-2. Run `npm install`.
-3. Use `npm run test:classifier` and `npm run test:reply` to exercise the shared OpenAI client with the classifier and reply flows.
 
-## Project structure highlights
-- `app/`: Next.js entry points (UI not modified by these tasks).
-- `tools/`: Modular tooling per platform (classifier + reply helpers currently under `tools/reddit`).
-- `prompts/`: Reusable prompt text for the classifier and reply generator.
-- `scripts/`: Local test runners (`testClassifier.ts` and `testReply.ts`) that hit the shared OpenAI client.
-- `db/`: Schema references.
+1. Copy `.env.local.example` to `.env.local` and populate the Supabase and OpenAI credentials (`SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `OPENAI_API_KEY`, etc.).
+2. Install dependencies: `npm install`.
+3. Run the dev server: `npm run dev`.
 
-## Database schema references
-- `db/tables_schema.sql`: Manual snapshot of critical tables like `social_engage`; update it by hand whenever those definitions change.
+Project sources live under `wizardlab/app/` (UI + API routes), `wizardlab/lib/` (enrichment + helpers), and `wizardlab/tools/` (reusable OpenAI tooling for Reddit and friends).
 
-## Business logic overview
-- **AI ingestion pipeline** accepts canonical URLs (currently from Gmail → F5Bot) and resolves the remote post metadata before persisting it so the AI can reason over the latest title/body/permalink.
-- **Classifier layer** ingests that platform context (title, body, permalink, platform) along with the shared prompts and feeds the OpenAI client to decide whether to reply, capturing `{ should_reply, confidence, reason }`.
-- **Reply generator layer** reuses the same client with a reply prompt plus the same context to craft a short, calm response that matches our tone guardrails.
-- **social_engage table** stores each candidate plus metadata: classifier decision, reply text/model, workflow status (`pending`, `ignored`, `approved`, `posted`), posting timestamps, source, and raw payloads for diagnostics.
-- **Automation scripts** under `scripts/` (`testClassifier.ts`, `testReply.ts`) let you exercise the classifier and reply pipelines locally before wiring them into automated flows.
+## Key environment variables
 
-## Endpoints
-- `/`: The only Next.js route today renders the placeholder landing page; no additional API routes exist yet.
-- Tooling currently runs via scripts and imports, not HTTP handlers. When automations call into the classifier/reply helpers, they should import `tools/reddit/classifier/classify.ts` and `tools/reddit/reply/generateReply.ts` directly.
+- `SUPABASE_URL` & `SUPABASE_SERVICE_ROLE_KEY`: needed for both web UI and enrichment cron jobs.
+- `OPENAI_API_KEY`, `OPENAI_MODEL_CLASSIFIER`, `OPENAI_MODEL_REPLY`: drive the classifier + reply prompts.
+- `SOCIAL_INGEST_BATCH_SIZE` (optional): controls how many pending rows the enrichment cron processes each run.
+
+## Core flows
+
+### Social Engage dashboard (`wizardlab/app/lab/social-engage/SocialEngageTable.tsx`)
+
+- Displays rows fetched via `SELECT_FIELDS` from `wizardlab/lib/social-engage/types.ts`.
+- Shows AI replies inside a modal, with filters, sorting, and status badges.
+- New **Post** action for rows marked `ready` that: (1) copies the AI reply, (2) opens the Reddit permalink, and (3) hits `POST /api/social/mark-posted` so the row switches to `posted` and records `posted_at` + `posted_by`.
+- The same handler is wired to desktop/mobile UIs and the modal footer so operators always get clipboard + permalink prep before the human paste/send step.
+
+### Mark-posted API (`wizardlab/app/api/social/mark-posted/route.ts`)
+
+- Accepts `{ id }` via `POST` and updates the matching `social_engage` row:
+  - `status = "posted"`
+  - `posted_at` & `updated_at` = `now()`
+  - `posted_by = "lab-dashboard"`
+- Returns `{ success: true }` on success, otherwise `{ error }`.
+- Internal use only; no auth is enforced yet.
+
+### Enrichment pipeline (`wizardlab/lib/socialIngest/enrich.ts`)
+
+- Pulls pending Reddit rows and hydrates bodies via `row.extra.hydrated.full_body` when available.
+- Builds `finalInput` as that hydrated body (or the trimmed title/body fallback), writes it to `ai_input`, and reuses the same string in the OpenAI prompt so audits can see the exact text the classifier read.
+- Persists the classifier decision (`ai_reply_draft`, `ai_should_reply`, `ai_parse_ok`, etc.) without changing cron cadence or schema fields.
+
+## Testing & tooling
+
+- `npm run lint` (ESLint).
+- The `tools/reddit` helpers expose the shared OpenAI client plus classification/reply helpers (`analyzeForReply`, reply drafts, etc.).
+- `scripts/` contains ad-hoc runners such as `testClassifier.ts` and `testReply.ts` that hit the OpenAI clients locally when you need to debug prompts before enabling automation.

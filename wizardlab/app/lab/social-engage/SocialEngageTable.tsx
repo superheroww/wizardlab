@@ -454,7 +454,7 @@ function SortableHeader({
 function StatusBadge({ value }: { value: string | null }) {
   const label = value ?? "Unknown";
   const normalized = label.toLowerCase();
-  let base =
+  const base =
     "inline-flex items-center rounded-full px-2 py-0.5 text-[0.65rem] font-medium capitalize ";
   let variant = "bg-zinc-100 text-zinc-700";
   if (normalized === "ready") variant = "bg-emerald-100 text-emerald-700";
