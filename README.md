@@ -18,9 +18,9 @@ Project sources live under `wizardlab/app/` (UI + API routes), `wizardlab/lib/` 
 
 ## Core flows
 
-### Social Engage dashboard (`wizardlab/app/lab/social-engage/SocialEngageTable.tsx`)
+### Social Engage dashboard (`wizardlab/app/admin/social-metrics/components/SocialEngageTable.tsx`)
 
-- Displays rows fetched via `SELECT_FIELDS` from `wizardlab/lib/social-engage/types.ts`.
+- Displays rows fetched via `SELECT_FIELDS` from `wizardlab/app/admin/social-metrics/types.ts`.
 - Shows AI replies inside a modal, with filters, sorting, and status badges.
 - New **Post** action for rows marked `ready` that: (1) copies the AI reply, (2) opens the Reddit permalink, and (3) hits `POST /api/social/mark-posted` so the row switches to `posted` and records `posted_at` + `posted_by`.
 - The same handler is wired to desktop/mobile UIs and the modal footer so operators always get clipboard + permalink prep before the human paste/send step.

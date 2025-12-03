@@ -1,51 +1,65 @@
-// app/page.tsx
 import type { Metadata } from "next";
-import { createClient } from "@/utils/supabase/server";
-import SocialEngageTable from "./lab/social-engage/SocialEngageTable";
-import { SELECT_FIELDS, SocialEngageRow } from "./lab/social-engage/types";
-
-export const dynamic = "force-dynamic";
-export const revalidate = 0;
+import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "WizardLab — Recent Social Engagement",
-  robots: { index: false, follow: false },
+  title: "WizardLab tools",
+  description: "Internal dashboards for mix events and social engagement.",
 };
 
-export default async function Home() {
-  const supabase = createClient();
-  const { data, error } = await supabase
-    .from("social_engage")
-    .select(SELECT_FIELDS)
-    .order("created_at", { ascending: false })
-    .limit(100);
-
-  const rows = (data ?? []) as unknown as SocialEngageRow[];
-
+export default function Home() {
   return (
-    <div className="mx-auto max-w-6xl px-4 py-8">
-      <header className="space-y-3 pb-4">
-        <h1 className="text-2xl font-semibold tracking-tight">
-          Recent Social Engagement
-        </h1>
-        <p className="text-sm text-zinc-600 dark:text-zinc-300">
-          Review the latest <code className="rounded bg-zinc-100 px-1 py-0.5 text-[0.7rem] dark:bg-zinc-800">social_engage</code> rows. Filter by status
-          (Ready / Others), sort any column, and quickly inspect AI replies.
+    <div className="space-y-6">
+      <div className="space-y-2">
+        <h1 className="text-2xl font-semibold tracking-tight">WizardLab tools</h1>
+        <p className="text-sm text-neutral-600">
+          Internal dashboards for mix events and social engagement.
         </p>
-        {error && (
-          <div className="mt-3 rounded border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
-            Error loading data: {error.message}
-          </div>
-        )}
-      </header>
+      </div>
 
-      {rows.length === 0 && !error ? (
-        <div className="rounded border border-zinc-200 bg-zinc-50 px-4 py-3 text-sm text-zinc-700">
-          No engagement rows found yet.
-        </div>
-      ) : (
-        <SocialEngageTable rows={rows} filterMode="status" />
-      )}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <LandingCard
+          title="Mix events analytics"
+          description="View ETF mix events, top symbols, and popular combinations."
+          href="/admin/mix-events"
+        />
+        <LandingCard
+          title="Social metrics"
+          description="Monitor Reddit triggers and social engagement."
+          href="/admin/social-metrics"
+        />
+        <LandingCard
+          title="ETF holdings explorer"
+          description="Inspect raw ETF holdings by fund and underlying symbol."
+          href="/admin/etf-holdings"
+        />
+      </div>
+    </div>
+  );
+}
+
+function LandingCard({
+  title,
+  description,
+  href,
+}: {
+  title: string;
+  description: string;
+  href: string;
+}) {
+  return (
+    <div className="flex h-full flex-col justify-between rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+      <div className="space-y-2">
+        <h2 className="text-lg font-semibold text-neutral-900">{title}</h2>
+        <p className="text-sm text-neutral-600">{description}</p>
+      </div>
+      <div className="mt-4">
+        <Link
+          href={href}
+          className="inline-flex items-center justify-center rounded-lg bg-neutral-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-neutral-800"
+        >
+          Open
+        </Link>
+      </div>
     </div>
   );
 }

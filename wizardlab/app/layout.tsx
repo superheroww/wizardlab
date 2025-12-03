@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { TopNav } from "@/components/layout/TopNav";
 
 export const metadata: Metadata = {
   title: "Wizardlab",
@@ -13,7 +14,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="antialiased">{children}</body>
+      <body className="min-h-screen bg-white text-neutral-900 antialiased">
+        <TopNav />
+        <main className="max-w-6xl mx-auto px-4 py-6">{children}</main>
+      </body>
     </html>
   );
 }

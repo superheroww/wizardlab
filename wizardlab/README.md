@@ -21,7 +21,7 @@ App router pages live under `app/`, API routes under `app/api`, and shared logic
 
 ### Social Engage dashboard
 
-Located at `app/lab/social-engage/SocialEngageTable.tsx`, this client component:
+Located at `app/admin/social-metrics/components/SocialEngageTable.tsx`, this client component:
 
 - Lists Reddit rows with filters, sorting, and statuses.
 - Shows AI replies in a modal and copies text to the clipboard.
