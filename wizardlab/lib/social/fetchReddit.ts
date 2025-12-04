@@ -135,6 +135,7 @@ export async function fetchRedditPostViaDecodo(postUrl: string): Promise<DecodoR
   if (!apiKey) {
     throw new Error("DECODO_API_KEY is not configured. Unable to call Decodo Scraper API.");
   }
+  const auth = Buffer.from(`${apiKey}:`).toString("base64");
 
   let response: Response;
   try {
@@ -143,7 +144,7 @@ export async function fetchRedditPostViaDecodo(postUrl: string): Promise<DecodoR
       headers: {
         "Content-Type": "application/json",
         Accept: "application/json",
-        Authorization: `Basic ${apiKey}`,
+        Authorization: `Basic ${auth}`,
       },
       body: JSON.stringify({
         target: "reddit_post",
@@ -159,8 +160,9 @@ export async function fetchRedditPostViaDecodo(postUrl: string): Promise<DecodoR
   const payload = parseBody(text);
 
   if (!response.ok) {
-    const reason = extractErrorMessage(payload, response.statusText || "Unknown error");
-    throw new Error(`Decodo request failed (${response.status}): ${reason}`);
+    throw new Error(
+      `Decodo request failed (${response.status}): ${text || response.statusText || "Unknown error"}`
+    );
   }
 
   const post = extractPostCandidate(payload);
