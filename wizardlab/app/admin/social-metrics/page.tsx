@@ -1,6 +1,7 @@
 import { MainShell } from "@/components/layout/MainShell";
-import { StatCard } from "@/components/ui/StatCard";
+import { StatusPill } from "@/components/social/StatusPill";
 import { DataTable, type ColumnDef } from "@/components/ui/DataTable";
+import { getStatusSequence, isKnownStatus, normalizeStatus } from "@/lib/social/statusMeta";
 import { createClient } from "@/utils/supabase/server";
 
 import SocialEngageTable from "./components/SocialEngageTable";
@@ -18,15 +19,6 @@ type DailyMetrics = {
   should_reply_count: number;
 };
 
-type Counters = {
-  total_rows: number;
-  total_unique_posts: number;
-  pending_count: number;
-  ready_count: number;
-  posted_count: number;
-  ai_should_reply_count: number;
-};
-
 const dailyColumns: ColumnDef[] = [
   { key: "bucket_date", label: "Date" },
   { key: "status", label: "Status" },
@@ -38,11 +30,6 @@ const dailyColumns: ColumnDef[] = [
 
 export default async function SocialMetricsPage() {
   const supabase = createClient();
-
-  const { data: countersRaw, error: countersError } = await supabase
-    .rpc("social_engage_counters")
-    .single();
-  const counters = (countersRaw as Counters | null) ?? null;
 
   const { data: dailyRaw, error: dailyError } = await supabase.rpc(
     "social_engage_metrics_daily"
@@ -71,33 +58,14 @@ export default async function SocialMetricsPage() {
         title="Social metrics"
         description="Track Reddit triggers, posts, and engagement."
       >
-        {(countersError || dailyError || rowsError) && (
+        {(dailyError || rowsError) && (
           <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {countersError && <div>Counters error: {countersError.message}</div>}
             {dailyError && <div>Daily metrics error: {dailyError.message}</div>}
             {rowsError && <div>Rows error: {rowsError.message}</div>}
           </div>
         )}
 
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-          {counters ? (
-            <>
-              <StatCard label="Total rows" value={counters.total_rows} />
-              <StatCard label="Unique posts" value={counters.total_unique_posts} />
-              <StatCard label="Pending" value={counters.pending_count} />
-              <StatCard label="Ready" value={counters.ready_count} />
-              <StatCard label="Posted" value={counters.posted_count} />
-              <StatCard
-                label="AI should reply"
-                value={counters.ai_should_reply_count}
-              />
-            </>
-          ) : (
-            <div className="rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-600">
-              No counters available yet.
-            </div>
-          )}
-        </div>
+        <StatusOverview rows={rows} />
 
         <div className="space-y-2">
           <h3 className="text-base font-semibold text-neutral-900">Daily activity</h3>
@@ -115,6 +83,61 @@ export default async function SocialMetricsPage() {
       >
         <SocialEngageTable rows={rows} filterMode="status" />
       </MainShell>
+    </div>
+  );
+}
+
+function StatusOverview({ rows }: { rows: SocialEngageRow[] }) {
+  const statusOrder = getStatusSequence();
+  const baseCounts = Object.fromEntries(statusOrder.map((key) => [key, 0])) as Record<
+    (typeof statusOrder)[number],
+    number
+  >;
+  let otherCount = 0;
+
+  for (const row of rows) {
+    const normalized = normalizeStatus(row.status);
+    if (isKnownStatus(normalized)) {
+      baseCounts[normalized] += 1;
+    } else {
+      otherCount += 1;
+    }
+  }
+
+  return (
+    <div className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <div className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+            Status overview
+          </div>
+          <p className="text-sm text-neutral-500">
+            Latest {rows.length || 0} Reddit rows
+          </p>
+        </div>
+        <div className="text-xs font-medium text-neutral-400">
+          {rows.length} tracked
+        </div>
+      </div>
+      {rows.length ? (
+        <div className="mt-4 flex flex-wrap gap-2">
+          {statusOrder.map((status) => (
+            <StatusPill
+              key={status}
+              status={status}
+              count={baseCounts[status]}
+              variant="full"
+            />
+          ))}
+          {otherCount > 0 ? (
+            <StatusPill status="unknown" count={otherCount} variant="full" />
+          ) : null}
+        </div>
+      ) : (
+        <div className="mt-4 rounded-xl border border-dashed border-neutral-200 bg-neutral-50 px-4 py-6 text-sm text-neutral-500">
+          No social engagement rows yet.
+        </div>
+      )}
     </div>
   );
 }

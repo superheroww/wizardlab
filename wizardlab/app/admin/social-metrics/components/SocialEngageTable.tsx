@@ -1,7 +1,11 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { StatusPill } from "@/components/social/StatusPill";
 import { DataTable, type ColumnDef } from "@/components/ui/DataTable";
+import { normalizeStatus } from "@/lib/social/statusMeta";
+import type { KnownStatus } from "@/lib/social/statusMeta";
+import { useSocialPostHandler } from "@/hooks/useSocialPostHandler";
 import type { SocialEngageRow } from "../types";
 
 type Props = {
@@ -16,19 +20,30 @@ type SortConfig = {
   direction: SortDirection;
 };
 
-type SortKey = "created_at" | "title" | "relevance_score" | "status";
-type StatusFilter = "all" | "ready" | "others";
+type SortKey = "created_at" | "title" | "ai_priority" | "status";
+type StatusFilter = "all" | KnownStatus;
+
+const STATUS_FILTERS: Array<{ key: StatusFilter; label: string }> = [
+  { key: "all", label: "All" },
+  { key: "pending", label: "Pending" },
+  { key: "ready", label: "Ready" },
+  { key: "ignored", label: "Ignored" },
+  { key: "error", label: "Error" },
+  { key: "duplicate_semantic", label: "Duplicates" },
+  { key: "posted", label: "Posted" },
+];
+
 const sortableKeys: SortKey[] = [
   "created_at",
   "title",
-  "relevance_score",
+  "ai_priority",
   "status",
 ];
 
 const columns: ColumnDef[] = [
   { key: "created_at", label: "Created" },
   { key: "title", label: "Title / Body" },
-  { key: "relevance_score", label: "Score", isNumeric: true },
+  { key: "ai_priority", label: "Priority" },
   { key: "status", label: "Status" },
   { key: "actions", label: "Actions" },
 ];
@@ -43,16 +58,14 @@ export default function SocialEngageTable({
     direction: "desc",
   });
   const [modalRow, setModalRow] = useState<SocialEngageRow | null>(null);
+  const { handlePost } = useSocialPostHandler();
 
   const filteredRows = useMemo(() => {
     if (filterMode !== "status") return rows;
-    if (statusFilter === "ready") {
-      return rows.filter((row) => row.status?.toLowerCase() === "ready");
-    }
-    if (statusFilter === "others") {
-      return rows.filter((row) => row.status?.toLowerCase() !== "ready");
-    }
-    return rows;
+    if (statusFilter === "all") return rows;
+    return rows.filter(
+      (row) => normalizeStatus(row.status) === statusFilter
+    );
   }, [filterMode, rows, statusFilter]);
 
   const sortedRows = useMemo(() => {
@@ -94,33 +107,6 @@ export default function SocialEngageTable({
     });
   };
 
-  async function handlePost(row: SocialEngageRow) {
-    const text = row.ai_reply_draft || row.reply_text || "";
-    if (!text) return;
-
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch (err) {
-      console.error("Failed to copy reply text", err);
-    }
-
-    setModalRow(null);
-
-    if (row.permalink) {
-      window.open(row.permalink, "_blank", "noopener,noreferrer");
-    }
-
-    try {
-      await fetch("/api/social/mark-posted", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: row.id }),
-      });
-    } catch (err) {
-      console.error("Failed to mark row as posted", err);
-    }
-  }
-
   function shortDateTime(value: string | null) {
     if (!value) return "";
     try {
@@ -140,8 +126,9 @@ export default function SocialEngageTable({
   }
 
   const tableRows = sortedRows.map((row) => {
-    const canReply = !!(row.ai_reply_draft || row.reply_text);
+    const canReply = !!row.ai_reply_draft;
     const isReady = row.status?.toLowerCase() === "ready";
+    const priorityLabel = row.ai_priority || "—";
 
     return {
       created_at: (
@@ -157,13 +144,19 @@ export default function SocialEngageTable({
           <div className="line-clamp-2 text-[0.8rem] text-neutral-500">
             {truncate(row.body, 140)}
           </div>
+          {row.ai_reason ? (
+            <div className="line-clamp-1 text-[0.7rem] uppercase text-neutral-400">
+              {row.ai_reason}
+            </div>
+          ) : null}
         </div>
       ),
-      relevance_score:
-        row.relevance_score != null
-          ? row.relevance_score.toFixed(2)
-          : "—",
-      status: <StatusBadge value={row.status} />,
+      ai_priority: (
+        <span className="capitalize text-sm text-neutral-700">
+          {priorityLabel}
+        </span>
+      ),
+      status: <StatusPill status={row.status} variant="compact" />,
       actions: (
         <div className="flex flex-wrap justify-end gap-2">
           <ActionButton
@@ -181,7 +174,13 @@ export default function SocialEngageTable({
             disabled={!canReply}
           />
           {isReady && canReply ? (
-            <ActionButton label="Post" onClick={() => handlePost(row)} />
+            <ActionButton
+              label="Post"
+              onClick={() => {
+                setModalRow(null);
+                void handlePost(row);
+              }}
+            />
           ) : null}
         </div>
       ),
@@ -192,28 +191,30 @@ export default function SocialEngageTable({
 
   return (
     <div className="space-y-4">
-      {filterMode === "status" && (
-        <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-neutral-200 bg-neutral-50 px-3 py-2 text-xs sm:text-sm">
-          <div className="font-medium text-neutral-800">Status filter</div>
-          <div className="inline-flex items-center gap-1 rounded-full bg-white p-1">
-            <FilterChip
-              label="All"
-              active={statusFilter === "all"}
+      {filterMode === "status" ? (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between text-sm font-medium text-neutral-600">
+            <span>Quick filters</span>
+            <button
+              type="button"
               onClick={() => setStatusFilter("all")}
-            />
-            <FilterChip
-              label="Ready"
-              active={statusFilter === "ready"}
-              onClick={() => setStatusFilter("ready")}
-            />
-            <FilterChip
-              label="Others"
-              active={statusFilter === "others"}
-              onClick={() => setStatusFilter("others")}
-            />
+              className="text-xs uppercase tracking-wide text-neutral-400 hover:text-neutral-600"
+            >
+              Reset
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-2 rounded-2xl border border-neutral-200 bg-white/90 p-3 shadow-sm sm:gap-3">
+            {STATUS_FILTERS.map((filter) => (
+              <FilterChip
+                key={filter.key}
+                label={filter.label}
+                active={statusFilter === filter.key}
+                onClick={() => setStatusFilter(filter.key)}
+              />
+            ))}
           </div>
         </div>
-      )}
+      ) : null}
 
       <DataTable
         columns={columns}
@@ -249,9 +250,7 @@ export default function SocialEngageTable({
 
             <div className="max-h-[52vh] overflow-y-auto px-4 py-3 text-sm text-neutral-800">
               <pre className="whitespace-pre-wrap text-[0.9rem] leading-relaxed">
-                {modalRow.ai_reply_draft ||
-                  modalRow.reply_text ||
-                  "(No reply text found)"}
+                {modalRow.ai_reply_draft || "(No reply text found)"}
               </pre>
             </div>
 
@@ -260,20 +259,19 @@ export default function SocialEngageTable({
                 {modalRow.permalink || "No permalink"}
               </div>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
+                <ActionButton
+                  label="Cancel"
+                  variant="ghost"
                   onClick={() => setModalRow(null)}
-                  className="rounded-full border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-600 hover:bg-neutral-50"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handlePost(modalRow)}
-                  className="rounded-full bg-neutral-900 px-3 py-1.5 text-xs font-medium text-white hover:bg-neutral-800"
-                >
-                  Post
-                </button>
+                />
+                <ActionButton
+                  label="Post"
+                  onClick={() => {
+                    const row = modalRow;
+                    setModalRow(null);
+                    void handlePost(row);
+                  }}
+                />
               </div>
             </div>
           </div>
@@ -296,28 +294,15 @@ function FilterChip({
     <button
       type="button"
       onClick={onClick}
-      className={`rounded-full px-3 py-1.5 text-[0.75rem] font-medium transition ${
+      className={`rounded-full border px-3 py-1 text-xs font-semibold transition ${
         active
-          ? "bg-neutral-900 text-white"
-          : "bg-transparent text-neutral-600 hover:bg-neutral-100"
+          ? "border-neutral-900 bg-neutral-900 text-white"
+          : "border-neutral-200 bg-white text-neutral-600 hover:border-neutral-400"
       }`}
     >
       {label}
     </button>
   );
-}
-
-function StatusBadge({ value }: { value: string | null }) {
-  const label = value ?? "Unknown";
-  const normalized = label.toLowerCase();
-  const base =
-    "inline-flex items-center rounded-full px-2 py-0.5 text-[0.65rem] font-medium capitalize ";
-  let variant = "bg-neutral-100 text-neutral-700";
-  if (normalized === "ready") variant = "bg-emerald-100 text-emerald-700";
-  else if (normalized === "pending") variant = "bg-amber-100 text-amber-700";
-  else if (normalized === "posted") variant = "bg-blue-100 text-blue-700";
-
-  return <span className={base + variant}>{label}</span>;
 }
 
 function ActionButton({
@@ -331,18 +316,22 @@ function ActionButton({
   disabled?: boolean;
   variant?: "solid" | "ghost";
 }) {
+  const base =
+    "inline-flex items-center justify-center rounded-full px-3 py-1.5 text-xs font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2";
   const styles =
     variant === "ghost"
-      ? "border border-neutral-200 bg-white text-neutral-700 hover:border-neutral-300"
-      : "bg-neutral-900 text-white hover:bg-neutral-800";
+      ? "border border-neutral-200 bg-white text-neutral-600 hover:border-neutral-300"
+      : "border border-neutral-900 bg-neutral-900 text-white hover:bg-neutral-800";
 
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className={`rounded-full px-3 py-1.5 text-[0.75rem] font-medium transition ${
-        disabled ? "cursor-not-allowed bg-neutral-100 text-neutral-400" : styles
+      className={`${base} ${
+        disabled
+          ? "cursor-not-allowed border border-dashed border-neutral-200 bg-neutral-100 text-neutral-400"
+          : styles
       }`}
     >
       {label}

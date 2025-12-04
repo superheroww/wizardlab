@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
+import { logIngestError, logIngestInfo } from "@/lib/log/socialLog";
 import { normalizeSocialIngestPayload } from "@/lib/social/normalizeIncoming";
-import { resolveRedditPostFromUrl } from "@/tools/reddit/resolveRedditPostFromUrl";
+import { extractRedditPostId } from "@/tools/reddit/utils/extractRedditPostId";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
@@ -15,17 +16,30 @@ export async function POST(req: NextRequest) {
   try {
     rawPayload = await req.json();
   } catch (error) {
-    console.error("social_ingest: invalid payload", error);
-    return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
+    const detail = error instanceof Error ? error.message : String(error);
+    const message = `Invalid JSON payload: ${detail}`;
+    const errorId = logIngestError("ingest_pipeline", {
+      message,
+      attempt: "ingest",
+      reason: "json",
+    });
+    return NextResponse.json({ error: message, error_id: errorId }, { status: 400 });
   }
 
   let normalizedPayload;
   try {
     normalizedPayload = normalizeSocialIngestPayload(rawPayload);
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error("social_ingest: invalid payload", message);
-    return NextResponse.json({ error: message }, { status: 400 });
+    const detail = error instanceof Error ? error.message : String(error);
+    const message = `Invalid payload: ${detail}`;
+    const errorId = logIngestError("ingest_pipeline", {
+      message,
+      url: typeof rawPayload.url === "string" ? rawPayload.url : undefined,
+      platform: typeof rawPayload.platform === "string" ? rawPayload.platform : undefined,
+      attempt: "ingest",
+      reason: "validation",
+    });
+    return NextResponse.json({ error: message, error_id: errorId }, { status: 400 });
   }
 
   if (normalizedPayload.platform !== "reddit") {
@@ -35,106 +49,132 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  console.log("social_ingest: ingesting reddit post", {
-    platform: normalizedPayload.platform,
-    raw_source_url: normalizedPayload.raw_source_url,
-    external_id: normalizedPayload.external_id,
-  });
+  const canonicalUrl = canonicalizeRedditPermalink(normalizedPayload.permalink);
+  const extra: Record<string, unknown> = normalizedPayload.extra;
 
-  let resolvedPost;
-  try {
-    resolvedPost = await resolveRedditPostFromUrl(normalizedPayload);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error("social_ingest: failed to resolve Reddit post", {
-      error: message,
-      url: normalizedPayload.raw_source_url,
+  const { data: existingRows, error: duplicateCheckError } = await supabaseAdmin
+    .from("social_engage")
+    .select("id, status")
+    .eq("platform", normalizedPayload.platform)
+    .eq("permalink", canonicalUrl)
+    .limit(1);
+
+  if (duplicateCheckError) {
+    const errorId = logIngestError("ingest_pipeline", {
+      message: `Failed duplicate permalink check: ${duplicateCheckError.message}`,
+      url: canonicalUrl,
+      platform: normalizedPayload.platform,
+      attempt: "ingest",
+      reason: "db",
     });
     return NextResponse.json(
-      { error: "Internal error" },
+      { error: "Failed to check duplicates", error_id: errorId },
       { status: 500 }
     );
   }
 
-  const canonicalUrl = resolvedPost.canonical_url ?? normalizedPayload.permalink;
+  if (existingRows && existingRows.length > 0) {
+    const existing = existingRows[0];
+    logIngestInfo("ingest_pipeline", {
+      message: "Rejecting ingest: exact duplicate permalink",
+      platform: normalizedPayload.platform,
+      url: canonicalUrl,
+      attempt: "ingest",
+      extra: {
+        existing_id: existing.id,
+        status: existing.status,
+      },
+    });
 
-  console.info("social_ingest: resolved reddit metadata", {
-    canonicalUrl,
-    title: resolvedPost.title,
-    bodyPreview: resolvedPost.body ? resolvedPost.body.slice(0, 120) : null,
+    return NextResponse.json(
+      {
+        status: "duplicate_exact",
+        existing_id: existing.id,
+      },
+      { status: 200 }
+    );
+  }
+
+  logIngestInfo("ingest_pipeline", {
+    message: "Queued reddit post for enrichment",
+    url: canonicalUrl,
+    platform: normalizedPayload.platform,
+    attempt: "ingest",
+    extra: {
+      external_id: normalizedPayload.external_id,
+      source: normalizedPayload.source,
+    },
   });
 
-  const extra: Record<string, unknown> = {
-    ...normalizedPayload.extra,
-  };
-
-  if (resolvedPost.hydrated_body || resolvedPost.hydrated_html) {
-    extra.hydrated = {
-      ...(resolvedPost.hydrated_body ? { full_body: resolvedPost.hydrated_body } : {}),
-      ...(resolvedPost.hydrated_html ? { html: resolvedPost.hydrated_html } : {}),
-    };
-  }
-
-  const redditMetadata: Record<string, unknown> = {};
-  if (resolvedPost.subreddit) {
-    redditMetadata.subreddit = resolvedPost.subreddit;
-  }
-  if (resolvedPost.author) {
-    redditMetadata.author = resolvedPost.author;
-  }
-  if (resolvedPost.karma !== null && resolvedPost.karma !== undefined) {
-    redditMetadata.karma = resolvedPost.karma;
-  }
-  if (Object.keys(redditMetadata).length > 0) {
-    extra.reddit_metadata = redditMetadata;
-  }
-
   const insertResponse = await supabaseAdmin.from("social_engage").insert({
-    platform: resolvedPost.platform,
-    external_post_id: resolvedPost.external_id,
-    external_comment_id: null,
+    platform: normalizedPayload.platform,
+    external_post_id: normalizedPayload.external_id,
     permalink: canonicalUrl,
     raw_source_url: normalizedPayload.raw_source_url,
-    author_handle: null,
-    channel: null,
-    title: resolvedPost.title,
-    body: resolvedPost.body,
-    classifier_model: null,
-    should_reply: null,
-    relevance_score: null,
-    relevance_reason: null,
-    reply_model: null,
-    reply_text: null,
+    title: null,
+    body: null,
     status: "pending",
-    posted_at: null,
-    posted_by: null,
-    source: resolvedPost.source,
+    source: normalizedPayload.source,
     extra,
   });
 
   if (insertResponse.error) {
-    console.error("social_ingest: failed to insert into social_engage", {
+    const errorDetail =
+      insertResponse.error.message || JSON.stringify(insertResponse.error);
+    const errorId = logIngestError("ingest_pipeline", {
+      message: `Failed to insert into social_engage: ${errorDetail}`,
       url: normalizedPayload.raw_source_url,
-      insertError: insertResponse.error,
+      platform: normalizedPayload.platform,
+      attempt: "ingest",
+      reason: "db",
     });
     return NextResponse.json(
-      { error: "Failed to write social_engage" },
+      { error: "Failed to write social_engage", error_id: errorId },
       { status: 500 }
     );
   }
 
-  console.info("social_ingest: inserted Reddit post", {
-    platform: resolvedPost.platform,
-    external_post_id: resolvedPost.external_id,
-    source: resolvedPost.source,
+  logIngestInfo("ingest_pipeline", {
+    message: "Inserted pending Reddit ingest row",
+    url: canonicalUrl,
+    platform: normalizedPayload.platform,
+    attempt: "ingest",
+    extra: {
+      external_post_id: normalizedPayload.external_id,
+      source: normalizedPayload.source,
+    },
   });
 
   return NextResponse.json(
     {
-      status: "ok",
+      status: "queued",
       platform: normalizedPayload.platform,
-      external_post_id: resolvedPost.external_id,
+      external_post_id: normalizedPayload.external_id,
     },
     { status: 200 }
   );
+}
+
+function canonicalizeRedditPermalink(url: string): string {
+  const trimmed = (url ?? "").toString().trim();
+  if (!trimmed) {
+    return url;
+  }
+
+  const postId = extractRedditPostId(trimmed);
+  if (postId) {
+    return `https://www.reddit.com/comments/${postId}/`;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    parsed.hash = "";
+    parsed.search = "";
+    if (!parsed.pathname.endsWith("/")) {
+      parsed.pathname = `${parsed.pathname}/`;
+    }
+    return parsed.toString();
+  } catch {
+    return trimmed;
+  }
 }

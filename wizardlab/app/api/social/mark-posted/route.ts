@@ -1,13 +1,12 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@/utils/supabase/server";
+import { supabaseAdmin } from "@/lib/supabase/admin";
 
 export async function POST(req: Request) {
-  const supabase = createClient();
-
   let body: { id?: string } = {};
+
   try {
     body = await req.json();
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json({ error: "Invalid JSON" }, { status: 400 });
   }
 
@@ -17,23 +16,21 @@ export async function POST(req: Request) {
   }
 
   const now = new Date().toISOString();
-  const { error } = await supabase
+  const { error } = await supabaseAdmin
     .from("social_engage")
     .update({
       status: "posted",
-      posted_at: now,
-      posted_by: "lab-dashboard",
       updated_at: now,
     })
     .eq("id", id);
 
   if (error) {
-    console.error("Failed to mark social_engage row as posted", error);
+    console.error("social_mark_posted: update_failed", { id, error });
     return NextResponse.json(
       { error: "Failed to update row" },
       { status: 500 }
     );
   }
 
-  return NextResponse.json({ success: true });
+  return NextResponse.json({ status: "ok" });
 }

@@ -26,9 +26,9 @@ export function DataTable({
   emptyMessage = "No data to display.",
 }: DataTableProps) {
   return (
-    <div className="overflow-x-auto rounded-xl border border-neutral-200 bg-white">
+    <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white shadow-sm">
       <table className="min-w-full text-left text-sm">
-        <thead className="bg-neutral-50 text-xs font-medium uppercase tracking-wide text-neutral-500">
+        <thead className="bg-neutral-50 text-[0.65rem] font-semibold uppercase tracking-wide text-neutral-500 sm:text-xs">
           <tr>
             {columns.map((column) => {
               const isSorted = sortKey === column.key;

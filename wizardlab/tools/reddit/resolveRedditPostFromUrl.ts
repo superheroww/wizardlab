@@ -15,6 +15,7 @@ export type ResolvedRedditPost = {
   subreddit: string | null;
   author: string | null;
   karma: number | null;
+  images: string[];
 };
 
 const DEFAULT_PLATFORM = "reddit";
@@ -89,5 +90,6 @@ export async function resolveRedditPostFromUrl(
     subreddit: normalizeString(fetched.subreddit),
     author: normalizeString(fetched.author),
     karma,
+    images: fetched.images ?? [],
   };
 }
