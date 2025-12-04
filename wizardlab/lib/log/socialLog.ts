@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 
-type AttemptType = "scraper" | "proxy" | "fallback" | "ingest";
+type AttemptType = "scraper" | "proxy" | "fallback" | "ingest" | "enrich";
 
 type BaseLog = {
   tag: "social_ingest";
@@ -16,11 +16,13 @@ type BaseLog = {
   ts: string;
 };
 
-type InfoParams = Omit<BaseLog, "error_id"> & {
-  extra?: Record<string, unknown>;
-};
-
-type ErrorParams = Omit<BaseLog, "error_id"> & {
+type LogParams = {
+  message: string;
+  url?: string;
+  platform?: string;
+  status_code?: number;
+  reason?: string;
+  attempt?: AttemptType;
   extra?: Record<string, unknown>;
 };
 
@@ -45,7 +47,7 @@ function sanitizeMessage(raw: string): { sanitized: string; redacted: boolean } 
   return { sanitized, redacted };
 }
 
-export function logIngestInfo(context: string, params: InfoParams) {
+export function logIngestInfo(context: string, params: LogParams) {
   const timestamp = new Date().toISOString();
   const { sanitized } = sanitizeMessage(params.message);
   const payload: BaseLog = {
@@ -68,7 +70,7 @@ export function logIngestInfo(context: string, params: InfoParams) {
   console.log(JSON.stringify(merged));
 }
 
-export function logIngestError(context: string, params: ErrorParams): string {
+export function logIngestError(context: string, params: LogParams): string {
   const timestamp = new Date().toISOString();
   const { sanitized, redacted } = sanitizeMessage(params.message);
   const error_id = randomUUID();

@@ -91,7 +91,7 @@ async function runVisionOcr(imageUrl: string, model: string): Promise<string> {
         role: "user",
         content: [
           { type: "input_text", text: PROMPT },
-          { type: "input_image", image_url: imageUrl },
+          { type: "input_image", image_url: imageUrl, detail: "high" },
         ],
       },
     ],
