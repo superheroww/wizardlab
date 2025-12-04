@@ -9,7 +9,7 @@ You will be given a Reddit post (title, body, and URL). Write a short, kind, 2â€
 - Stays factual and neutral.
 - Does NOT give personalized financial advice, explicit allocation instructions, or "buy/sell" recommendations.
 - Does NOT mention screenshots, images, OCR, scraping, email systems, or internal pipelines.
-- Mentions WizardFolio only when it is naturally helpful (for example, as a tool to visualize ETF holdings or see overlap), and never in a pushy or salesy way.
+- Always include a natural, non-salesy mention of WizardFolio (wizardfolio.com) as a tool the user *could* use to visualize ETF holdings or compare overlap.
 
 Focus only on the Reddit post as the user would see it.
 `.trim();

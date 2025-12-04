@@ -1,4 +1,4 @@
-'use client';
+"use client";
 
 import { useRouter } from "next/navigation";
 import type { SocialEngageRow } from "@/app/admin/social-metrics/types";
@@ -6,15 +6,45 @@ import type { SocialEngageRow } from "@/app/admin/social-metrics/types";
 export function useSocialPostHandler() {
   const router = useRouter();
 
+  async function copyToClipboard(text: string) {
+    try {
+      // Prefer modern API when in secure context
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+        return true;
+      }
+
+      // Fallback for desktop browsers that block navigator.clipboard
+      const textarea = document.createElement("textarea");
+      textarea.value = text;
+
+      // Prevent scrolling to bottom on desktop
+      textarea.style.position = "fixed";
+      textarea.style.top = "0";
+      textarea.style.left = "-9999px";
+
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+
+      const success = document.execCommand("copy");
+      document.body.removeChild(textarea);
+      return success;
+    } catch (err) {
+      console.error("clipboard_fallback_failed", err);
+      return false;
+    }
+  }
+
   async function handlePost(row: SocialEngageRow) {
     if (!row?.id) return;
 
     const text = row.ai_reply_draft?.trim();
+
     if (text) {
-      try {
-        await navigator.clipboard.writeText(text);
-      } catch (error) {
-        console.error("social_post: clipboard_failed", error);
+      const ok = await copyToClipboard(text);
+      if (!ok) {
+        console.error("social_post: clipboard_failed");
       }
     } else {
       console.warn("social_post: missing_reply_text", { id: row.id });
