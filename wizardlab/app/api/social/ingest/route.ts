@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
 
   let resolvedPost;
   try {
-    resolvedPost = resolveRedditPostFromUrl(payload);
+    resolvedPost = await resolveRedditPostFromUrl(payload);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("social_ingest: failed to resolve Reddit post", {
@@ -72,12 +72,38 @@ export async function POST(req: NextRequest) {
     bodyPreview: resolvedPost.body ? resolvedPost.body.slice(0, 120) : null,
   });
 
-  const extra = {
+  const payloadSubject =
+    typeof payload.f5bot_subject === "string" ? payload.f5bot_subject.trim() : "";
+  const payloadSnippet =
+    typeof payload.f5bot_snippet === "string" ? payload.f5bot_snippet.trim() : "";
+
+  const extra: Record<string, unknown> = {
     raw_reddit_url: canonicalUrl,
     raw_reddit_source: resolvedPost.source,
-    f5bot_subject: resolvedPost.title,
-    f5bot_snippet: resolvedPost.body,
+    f5bot_subject: payloadSubject || resolvedPost.title,
+    f5bot_snippet: payloadSnippet || resolvedPost.body,
   };
+
+  if (resolvedPost.hydrated_body || resolvedPost.hydrated_html) {
+    extra.hydrated = {
+      ...(resolvedPost.hydrated_body ? { full_body: resolvedPost.hydrated_body } : {}),
+      ...(resolvedPost.hydrated_html ? { html: resolvedPost.hydrated_html } : {}),
+    };
+  }
+
+  const redditMetadata: Record<string, unknown> = {};
+  if (resolvedPost.subreddit) {
+    redditMetadata.subreddit = resolvedPost.subreddit;
+  }
+  if (resolvedPost.author) {
+    redditMetadata.author = resolvedPost.author;
+  }
+  if (resolvedPost.karma !== null && resolvedPost.karma !== undefined) {
+    redditMetadata.karma = resolvedPost.karma;
+  }
+  if (Object.keys(redditMetadata).length > 0) {
+    extra.reddit_metadata = redditMetadata;
+  }
 
   const insertResponse = await supabaseAdmin.from("social_engage").insert({
     platform: resolvedPost.platform,
