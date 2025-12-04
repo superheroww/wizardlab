@@ -3,6 +3,7 @@ import Link from "next/link";
 import { MainShell } from "@/components/layout/MainShell";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 
+import { EtfHoldingsSummaryCard, type EtfSummaryRow } from "./components/EtfHoldingsSummaryCard";
 import { EtfHoldingsTable } from "./components/EtfHoldingsTable";
 import type { EtfHolding } from "./types";
 
@@ -45,6 +46,7 @@ export default async function EtfHoldingsPage({
   const { data, error } = await query;
 
   const holdings = (data ?? []) as EtfHolding[];
+  const summaryRows = buildEtfSummary(holdings);
 
   return (
     <div className="flex flex-col gap-8">
@@ -92,8 +94,45 @@ export default async function EtfHoldingsPage({
           </div>
         ) : null}
 
+        {summaryRows.length > 0 && (
+          <EtfHoldingsSummaryCard summary={summaryRows} />
+        )}
+
         <EtfHoldingsTable rows={holdings} />
       </MainShell>
     </div>
   );
+}
+
+function buildEtfSummary(rows: EtfHolding[]): EtfSummaryRow[] {
+  const grouping = new Map<string, { holdingCount: number; totalWeight: number }>();
+
+  for (const row of rows) {
+    const symbol = row.etf_symbol?.trim();
+    if (!symbol) continue;
+
+    const rawWeight =
+      typeof row.weight_pct === "number"
+        ? row.weight_pct
+        : Number(row.weight_pct);
+    const weight = Number.isFinite(rawWeight) ? rawWeight : 0;
+
+    const existing = grouping.get(symbol);
+    if (existing) {
+      existing.holdingCount += 1;
+      existing.totalWeight += weight;
+    } else {
+      grouping.set(symbol, { holdingCount: 1, totalWeight: weight });
+    }
+  }
+
+  const summary: EtfSummaryRow[] = Array.from(grouping.entries())
+    .map(([symbol, { holdingCount, totalWeight }]) => ({
+      symbol,
+      holdingCount,
+      totalWeight,
+    }))
+    .sort((a, b) => a.symbol.localeCompare(b.symbol));
+
+  return summary;
 }

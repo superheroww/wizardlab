@@ -54,7 +54,7 @@ export default async function SocialMetricsPage() {
     .select(SELECT_FIELDS)
     .order("created_at", { ascending: false })
     .limit(100);
-  const rows = (rowsRaw ?? []) as SocialEngageRow[];
+  const rows = (rowsRaw ?? []) as unknown as SocialEngageRow[];
 
   const dailyRows = daily.map((row) => ({
     bucket_date: row.bucket_date,
