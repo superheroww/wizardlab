@@ -7,11 +7,15 @@ export interface SocialEngageRow {
   body: string | null;
   source: string | null;
   status: string | null;
+  subreddit?: string | null;
+  extra: Record<string, unknown> | null;
+  ai_input: string | null;
   ai_parse_ok: boolean | null;
   ai_reply_draft: string | null;
   ai_priority: string | null;
   ai_reason: string | null;
   ai_category: string | null;
+  ai_result: unknown | null;
 }
 
 export const SELECT_FIELDS = [
@@ -28,4 +32,7 @@ export const SELECT_FIELDS = [
   "ai_priority",
   "ai_reason",
   "ai_category",
+  "extra",
+  "ai_input",
+  "ai_result",
 ].join(",");

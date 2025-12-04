@@ -11,6 +11,7 @@ import type { SocialEngageRow } from "../types";
 type Props = {
   rows: SocialEngageRow[];
   filterMode?: "status" | "none";
+  onViewRow?: (row: SocialEngageRow) => void;
 };
 
 type SortDirection = "asc" | "desc";
@@ -51,6 +52,7 @@ const columns: ColumnDef[] = [
 export default function SocialEngageTable({
   rows,
   filterMode = "none",
+  onViewRow,
 }: Props) {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortConfig, setSortConfig] = useState<SortConfig>({
@@ -139,6 +141,15 @@ export default function SocialEngageTable({
       status: <StatusPill status={row.status} variant="compact" />,
       actions: (
         <div className="flex flex-wrap justify-end gap-2">
+          {onViewRow ? (
+            <button
+              type="button"
+              onClick={() => onViewRow(row)}
+              className="text-xs font-semibold text-blue-500 transition hover:text-blue-400"
+            >
+              View
+            </button>
+          ) : null}
           <ActionButton
             label="Open"
             onClick={() => {

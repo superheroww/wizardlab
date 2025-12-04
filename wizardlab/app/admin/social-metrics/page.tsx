@@ -4,7 +4,8 @@ import { DataTable, type ColumnDef } from "@/components/ui/DataTable";
 import { getStatusSequence, isKnownStatus, normalizeStatus } from "@/lib/social/statusMeta";
 import { createClient } from "@/utils/supabase/server";
 
-import SocialEngageTable from "./components/SocialEngageTable";
+import ManualIngestCard from "./components/ManualIngestCard";
+import SocialEngagePanel from "./components/SocialEngagePanel";
 import { SELECT_FIELDS, type SocialEngageRow } from "./types";
 
 export const dynamic = "force-dynamic";
@@ -81,7 +82,10 @@ export default async function SocialMetricsPage() {
         title="Recent social engagement"
         description="Filter by status, sort any column, and review AI replies."
       >
-        <SocialEngageTable rows={rows} filterMode="status" />
+        <div className="space-y-4">
+          <ManualIngestCard />
+          <SocialEngagePanel rows={rows} filterMode="status" />
+        </div>
       </MainShell>
     </div>
   );
