@@ -1,30 +1,38 @@
+/**
+ * Handles Reddit ingestion through Decodo.
+ *
+ * Two mutually exclusive paths are supported:
+ *  1. The Decodo Scraper API (`DECODO_SCRAPER_USERNAME` / `DECODO_SCRAPER_PASSWORD`).
+ *     Preferred because Decodo returns a normalized Reddit payload directly.
+ *  2. The Decodo residential proxy (`DECODO_PROXY_HOST`, `DECODO_PROXY_PORT`,
+ *     `DECODO_PROXY_USERNAME`, `DECODO_PROXY_PASSWORD`).
+ *     Used only when scraper credentials are unavailable.
+ *
+ * Both paths resolve to the same `RedditPostNormalized` shape so downstream
+ * code can stay unchanged. This helper lives on the server only.
+ */
 import { ProxyAgent, fetch as undiciFetch } from "undici";
 
 const DECODO_ENDPOINT = "https://scraper-api.decodo.com/v2/scrape";
 const REDDIT_BASE = "https://www.reddit.com";
-const USER_AGENT = "Mozilla/5.0 (compatible; WizardLabBot/0.1; +https://wizardfolio.com)";
+const USER_AGENT =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
-export type DecodoRedditPost = {
+export type RedditCommentNormalized = {
+  author: string;
+  content_html: string | null;
+  karma: number | null;
+};
+
+export type RedditPostNormalized = {
   title: string;
   subreddit: string;
   author: string;
   post_url: string;
-  content_html: string;
-  karma: number;
-  comments: unknown[];
+  content_html: string | null;
+  karma: number | null;
+  comments: RedditCommentNormalized[];
 };
-
-type DecodoResponse =
-  | {
-      success?: boolean;
-      data?: unknown;
-      result?: unknown;
-      post?: unknown;
-      error?: unknown;
-      message?: string;
-    }
-  | null
-  | undefined;
 
 type ScraperCredentials = {
   username: string;
@@ -46,6 +54,26 @@ type RedditListing = {
   };
 };
 
+class DecodoScraperError extends Error {
+  constructor(
+    message: string,
+    public status?: number,
+    public bodySnippet?: string,
+    public isAuthError = false
+  ) {
+    super(message);
+  }
+}
+
+class DecodoProxyError extends Error {
+  constructor(message: string, public status?: number, public bodySnippet?: string) {
+    super(message);
+  }
+}
+
+let cachedProxyAgent: ProxyAgent | null = null;
+let cachedProxyUrl: string | null = null;
+
 function ensureString(value: unknown): string {
   if (typeof value === "string") {
     return value;
@@ -58,17 +86,19 @@ function ensureString(value: unknown): string {
   return String(value);
 }
 
-function ensureNumber(value: unknown): number {
+function ensureNumber(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) {
     return value;
   }
 
   if (typeof value === "string") {
     const parsed = Number(value);
-    return Number.isNaN(parsed) ? 0 : parsed;
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
   }
 
-  return 0;
+  return null;
 }
 
 function ensureArray(value: unknown): unknown[] {
@@ -78,7 +108,49 @@ function ensureArray(value: unknown): unknown[] {
   return [];
 }
 
-function extractPostCandidate(payload: DecodoResponse): Record<string, unknown> | null {
+function redactedSnippet(text?: string): string {
+  const trimmed = (text ?? "").replace(/\s+/g, " ").trim();
+  if (!trimmed) {
+    return "empty body";
+  }
+  return trimmed.length > 200 ? `${trimmed.slice(0, 200)}...` : trimmed;
+}
+
+function normalizeHtml(value: unknown): string | null {
+  const text = ensureString(value).trim();
+  return text.length ? text : null;
+}
+
+function normalizeComments(raw: unknown): RedditCommentNormalized[] {
+  const items = ensureArray(raw);
+  return items
+    .map((candidate) => (typeof candidate === "object" && candidate ? candidate : {}))
+    .map((candidate) => ({
+      author: ensureString((candidate as Record<string, unknown>).author).trim(),
+      content_html: normalizeHtml(
+        (candidate as Record<string, unknown>).content_html ??
+          (candidate as Record<string, unknown>).body_html ??
+          (candidate as Record<string, unknown>).selftext_html ??
+          (candidate as Record<string, unknown>).selftext
+      ),
+      karma: ensureNumber((candidate as Record<string, unknown>).ups ?? (candidate as Record<string, unknown>).score),
+    }))
+    .filter((comment) => comment.author);
+}
+
+function parseBody(text: string): unknown {
+  if (!text) {
+    return null;
+  }
+
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { message: text };
+  }
+}
+
+function extractPostCandidate(payload: unknown): Record<string, unknown> | null {
   if (!payload || typeof payload !== "object") {
     return null;
   }
@@ -100,27 +172,15 @@ function extractPostCandidate(payload: DecodoResponse): Record<string, unknown> 
   return candidate as Record<string, unknown>;
 }
 
-function parseBody(text: string): DecodoResponse {
-  if (!text) {
-    return null;
-  }
-
-  try {
-    return JSON.parse(text);
-  } catch {
-    return { message: text };
-  }
-}
-
-function normalizePost(raw: Record<string, unknown>, fallbackUrl: string): DecodoRedditPost {
+function normalizePost(raw: Record<string, unknown>, fallbackUrl: string): RedditPostNormalized {
   return {
     title: ensureString(raw.title).trim(),
     subreddit: ensureString(raw.subreddit).trim(),
     author: ensureString(raw.author).trim(),
     post_url: ensureString(raw.post_url || raw.url).trim() || fallbackUrl,
-    content_html: ensureString(raw.content_html ?? raw.body ?? raw.selftext_html),
+    content_html: normalizeHtml(raw.content_html ?? raw.body ?? raw.selftext_html),
     karma: ensureNumber(raw.karma ?? raw.score ?? raw.upvotes),
-    comments: ensureArray(raw.comments),
+    comments: normalizeComments(raw.comments),
   };
 }
 
@@ -173,7 +233,17 @@ function resolveRedditCanonical(postData: Record<string, unknown>, fallback: str
   return fallback;
 }
 
-async function fetchViaScraper(postUrl: string, creds: ScraperCredentials): Promise<DecodoRedditPost> {
+function getProxyAgent(proxyUrl: string): ProxyAgent {
+  if (cachedProxyUrl === proxyUrl && cachedProxyAgent) {
+    return cachedProxyAgent;
+  }
+
+  cachedProxyAgent = new ProxyAgent(proxyUrl);
+  cachedProxyUrl = proxyUrl;
+  return cachedProxyAgent;
+}
+
+async function fetchViaScraper(postUrl: string, creds: ScraperCredentials): Promise<RedditPostNormalized> {
   let response: Response;
   try {
     const auth = Buffer.from(`${creds.username}:${creds.password}`).toString("base64");
@@ -183,6 +253,7 @@ async function fetchViaScraper(postUrl: string, creds: ScraperCredentials): Prom
         "Content-Type": "application/json",
         Accept: "application/json",
         Authorization: `Basic ${auth}`,
+        "User-Agent": USER_AGENT,
       },
       body: JSON.stringify({
         target: "reddit_post",
@@ -191,64 +262,57 @@ async function fetchViaScraper(postUrl: string, creds: ScraperCredentials): Prom
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to reach Decodo scraper API: ${message}`);
+    throw new DecodoScraperError(`Decodo scraper path network failure: ${message}`);
   }
 
   const text = await response.text();
   const payload = parseBody(text);
 
   if (!response.ok) {
-    throw new Error(
-      `Decodo scraper API request failed (${response.status}): ${
-        text || response.statusText || "Unknown error"
-      }`
+    const status = response.status;
+    const snippet = redactedSnippet(text);
+    throw new DecodoScraperError(
+      `Decodo scraper API request failed`,
+      status,
+      snippet,
+      status === 401 || status === 403
     );
   }
 
-  const post = extractPostCandidate(payload);
-  if (!post) {
-    throw new Error("Decodo scraper response did not include reddit_post data.");
+  const postCandidate = extractPostCandidate(payload);
+  if (!postCandidate) {
+    throw new DecodoScraperError("Decodo scraper path: no reddit_post data returned.");
   }
 
-  return normalizePost(post, postUrl);
+  return normalizePost(postCandidate, postUrl);
 }
 
-async function fetchViaProxy(postUrl: string, creds: ProxyCredentials): Promise<DecodoRedditPost> {
+async function fetchViaProxy(postUrl: string, creds: ProxyCredentials): Promise<RedditPostNormalized> {
   const proxyUrl = `http://${encodeURIComponent(creds.username)}:${encodeURIComponent(
     creds.password
   )}@${creds.host}:${creds.port}`;
-
-  let dispatcher: ProxyAgent;
-  try {
-    dispatcher = new ProxyAgent(proxyUrl);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to configure Decodo proxy agent: ${message}`);
-  }
-
+  const agent = getProxyAgent(proxyUrl);
   const redditJsonUrl = buildRedditJsonUrl(postUrl);
 
   let response: Awaited<ReturnType<typeof undiciFetch>>;
   try {
     response = await undiciFetch(redditJsonUrl, {
-      dispatcher,
+      dispatcher: agent,
       headers: {
         "User-Agent": USER_AGENT,
         Accept: "application/json",
+        "Accept-Language": "en-US,en;q=0.9",
       },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Decodo proxy fetch failed: ${message}`);
+    throw new DecodoProxyError(`Decodo proxy path network failure: ${message}`);
   }
 
   if (!response.ok) {
-    const text = await response.text();
-    throw new Error(
-      `Decodo proxy request failed (${response.status}) when fetching Reddit JSON: ${
-        text || response.statusText || "Unknown error"
-      }`
-    );
+    const status = response.status;
+    const snippet = redactedSnippet(await response.text());
+    throw new DecodoProxyError(`Decodo proxy path: Reddit returned ${status}`, status, snippet);
   }
 
   let payload: unknown;
@@ -256,17 +320,17 @@ async function fetchViaProxy(postUrl: string, creds: ProxyCredentials): Promise<
     payload = await response.json();
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    throw new Error(`Failed to parse Reddit JSON via proxy: ${message}`);
+    throw new DecodoProxyError(`Decodo proxy path: invalid JSON response: ${message}`);
   }
 
-  if (!Array.isArray(payload) || payload.length === 0) {
-    throw new Error("Unexpected Reddit JSON structure received via proxy.");
+  if (!Array.isArray(payload) || payload.length < 2) {
+    throw new DecodoProxyError("Unexpected Reddit JSON via proxy path.");
   }
 
   const postListing = payload[0] as RedditListing | undefined;
   const postData = postListing?.data?.children?.[0]?.data;
   if (!postData) {
-    throw new Error("Unable to extract Reddit post data via proxy.");
+    throw new DecodoProxyError("Decodo proxy path: missing Reddit post data.");
   }
 
   const commentsListing = (payload[1] as RedditListing | undefined)?.data?.children ?? [];
@@ -277,45 +341,65 @@ async function fetchViaProxy(postUrl: string, creds: ProxyCredentials): Promise<
       subreddit: postData.subreddit,
       author: postData.author,
       post_url: resolveRedditCanonical(postData, postUrl),
-      content_html: postData.selftext_html ?? postData.selftext ?? "",
+      content_html: postData.selftext_html ?? postData.selftext ?? null,
       karma: postData.score ?? postData.ups,
-      comments: commentsListing,
+      comments: commentsListing.map((child) => child.data ?? {}),
     },
     postUrl
   );
 }
 
-export async function fetchRedditPostViaDecodo(postUrl: string): Promise<DecodoRedditPost> {
+/**
+ * Fetches Reddit post metadata using Decodo.
+ *
+ * @param postUrl - Reddit post URL (any host variant). Must be server-side only.
+ * @returns A normalized RedditPostNormalized shape so callers can stay stable.
+ * @throws DecodoScraperError, DecodoProxyError on failures.
+ */
+export async function fetchRedditPostViaDecodo(postUrl: string): Promise<RedditPostNormalized> {
   if (!postUrl || typeof postUrl !== "string") {
-    throw new Error("fetchRedditPostViaDecodo requires a reddit post URL.");
+    throw new Error("fetchRedditPostViaDecodo requires a Reddit post URL.");
   }
 
   const scraperCreds = readScraperCredentials();
   const proxyCreds = readProxyCredentials();
 
   if (!scraperCreds && !proxyCreds) {
-    throw new Error("Missing Decodo credentials (scraper or proxy env vars must be set).");
+    throw new Error(
+      "Missing Decodo credentials. Set DECODO_SCRAPER_USERNAME/PASSWORD or DECODO_PROXY_HOST/PORT/USERNAME/PASSWORD."
+    );
   }
 
   if (scraperCreds) {
     try {
       return await fetchViaScraper(postUrl, scraperCreds);
     } catch (error) {
-      throw new Error(
-        error instanceof Error
-          ? `Decodo scraper credentials failed: ${error.message}`
-          : `Decodo scraper credentials failed: ${String(error)}`
-      );
+      if (error instanceof DecodoScraperError) {
+        if (error.isAuthError) {
+          throw error;
+        }
+        if (proxyCreds && (!error.status || error.status >= 500)) {
+          console.warn(
+            `Decodo scraper path failure (status: ${error.status}). Falling back to proxy path.`
+          );
+          return await fetchViaProxy(postUrl, proxyCreds);
+        }
+      }
+
+      if (!proxyCreds) {
+        throw error;
+      }
+
+      console.warn("Decodo scraper path failed. Falling back to proxy path.");
+      return await fetchViaProxy(postUrl, proxyCreds);
     }
   }
 
-  try {
-    return await fetchViaProxy(postUrl, proxyCreds as ProxyCredentials);
-  } catch (error) {
+  if (!proxyCreds) {
     throw new Error(
-      error instanceof Error
-        ? `Decodo proxy credentials failed: ${error.message}`
-        : `Decodo proxy credentials failed: ${String(error)}`
+      "Decodo proxy credentials are missing; unable to fetch Reddit post via proxy."
     );
   }
+
+  return await fetchViaProxy(postUrl, proxyCreds);
 }

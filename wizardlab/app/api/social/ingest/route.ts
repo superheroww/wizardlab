@@ -1,62 +1,54 @@
 import { NextRequest, NextResponse } from "next/server";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import {
-  resolveRedditPostFromUrl,
-  SocialIngestPayload,
-} from "@/tools/reddit/resolveRedditPostFromUrl";
+import { normalizeSocialIngestPayload } from "@/lib/social/normalizeIncoming";
+import { resolveRedditPostFromUrl } from "@/tools/reddit/resolveRedditPostFromUrl";
 
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-const isNonEmptyString = (value: unknown): value is string =>
-  typeof value === "string" && value.trim().length > 0;
-
+/**
+ * Ingestion now expects payloads of the shape `{ platform, url, ...extra }`
+ * and routes all remaining metadata through the `extra` JSON column.
+ */
 export async function POST(req: NextRequest) {
-  let payload: SocialIngestPayload;
+  let rawPayload: Record<string, unknown>;
   try {
-    payload = await req.json();
+    rawPayload = await req.json();
   } catch (error) {
     console.error("social_ingest: invalid payload", error);
     return NextResponse.json({ error: "Invalid payload" }, { status: 400 });
   }
 
-  const platform = isNonEmptyString(payload?.platform)
-    ? payload.platform.trim()
-    : "reddit";
-  const url = isNonEmptyString(payload?.url) ? payload.url.trim() : "";
-  const externalId = isNonEmptyString(payload?.external_id)
-    ? payload.external_id.trim()
-    : null;
-  const hasSnippet = isNonEmptyString(payload?.f5bot_snippet);
+  let normalizedPayload;
+  try {
+    normalizedPayload = normalizeSocialIngestPayload(rawPayload);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error("social_ingest: invalid payload", message);
+    return NextResponse.json({ error: message }, { status: 400 });
+  }
 
-  if (!platform || !url) {
+  if (normalizedPayload.platform !== "reddit") {
     return NextResponse.json(
-      { error: "Missing platform or url" },
+      { error: `Unsupported platform: ${normalizedPayload.platform}` },
       { status: 400 }
     );
   }
 
-  if (platform !== "reddit") {
-    return NextResponse.json(
-      { error: `Unsupported platform: ${platform}` },
-      { status: 400 }
-    );
-  }
-
-  console.log("social_ingest: ingesting reddit from gmail-f5bot", {
-    url,
-    external_id: externalId,
-    hasSnippet,
+  console.log("social_ingest: ingesting reddit post", {
+    platform: normalizedPayload.platform,
+    raw_source_url: normalizedPayload.raw_source_url,
+    external_id: normalizedPayload.external_id,
   });
 
   let resolvedPost;
   try {
-    resolvedPost = await resolveRedditPostFromUrl(payload);
+    resolvedPost = await resolveRedditPostFromUrl(normalizedPayload);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error("social_ingest: failed to resolve Reddit post", {
       error: message,
-      url,
+      url: normalizedPayload.raw_source_url,
     });
     return NextResponse.json(
       { error: "Internal error" },
@@ -64,7 +56,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const canonicalUrl = resolvedPost.canonical_url ?? url;
+  const canonicalUrl = resolvedPost.canonical_url ?? normalizedPayload.permalink;
 
   console.info("social_ingest: resolved reddit metadata", {
     canonicalUrl,
@@ -72,16 +64,8 @@ export async function POST(req: NextRequest) {
     bodyPreview: resolvedPost.body ? resolvedPost.body.slice(0, 120) : null,
   });
 
-  const payloadSubject =
-    typeof payload.f5bot_subject === "string" ? payload.f5bot_subject.trim() : "";
-  const payloadSnippet =
-    typeof payload.f5bot_snippet === "string" ? payload.f5bot_snippet.trim() : "";
-
   const extra: Record<string, unknown> = {
-    raw_reddit_url: canonicalUrl,
-    raw_reddit_source: resolvedPost.source,
-    f5bot_subject: payloadSubject || resolvedPost.title,
-    f5bot_snippet: payloadSnippet || resolvedPost.body,
+    ...normalizedPayload.extra,
   };
 
   if (resolvedPost.hydrated_body || resolvedPost.hydrated_html) {
@@ -110,6 +94,7 @@ export async function POST(req: NextRequest) {
     external_post_id: resolvedPost.external_id,
     external_comment_id: null,
     permalink: canonicalUrl,
+    raw_source_url: normalizedPayload.raw_source_url,
     author_handle: null,
     channel: null,
     title: resolvedPost.title,
@@ -129,7 +114,7 @@ export async function POST(req: NextRequest) {
 
   if (insertResponse.error) {
     console.error("social_ingest: failed to insert into social_engage", {
-      url,
+      url: normalizedPayload.raw_source_url,
       insertError: insertResponse.error,
     });
     return NextResponse.json(
@@ -147,7 +132,7 @@ export async function POST(req: NextRequest) {
   return NextResponse.json(
     {
       status: "ok",
-      platform,
+      platform: normalizedPayload.platform,
       external_post_id: resolvedPost.external_id,
     },
     { status: 200 }

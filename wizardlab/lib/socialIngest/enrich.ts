@@ -82,10 +82,9 @@ async function processRow(row: SocialEngageRow) {
     return;
   }
 
-  const hasSnippet = Boolean(readExtraString(row.extra, "f5bot_snippet"));
   const hasTitle = Boolean(row.title?.trim());
   const hasBody = Boolean(row.body?.trim());
-  if (!hasSnippet && !hasTitle && !hasBody) {
+  if (!hasTitle && !hasBody) {
     console.error("social_ingest: no text available for AI analysis", { id: row.id });
     await markRowError(row, "Missing post text for AI analysis");
     return;
@@ -126,11 +125,8 @@ async function analyzeRowForReply(
   row: SocialEngageRow,
   finalInput: string
 ): Promise<AiDecision> {
-  const snippet = trimSnippet(
-    readExtraString(row.extra, "f5bot_snippet"),
-    1024
-  );
-  const subject = readExtraString(row.extra, "f5bot_subject");
+  const snippet = null;
+  const subject = null;
 
   try {
     const aiDecision = await analyzeForReply({
@@ -209,32 +205,6 @@ async function markRowError(row: SocialEngageRow, note: string) {
       error: error.message,
     });
   }
-}
-
-function trimSnippet(value: string | null, maxLength: number): string {
-  if (!value) {
-    return "";
-  }
-
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return "";
-  }
-
-  return trimmed.length <= maxLength
-    ? trimmed
-    : `${trimmed.slice(0, maxLength).trim()}...`;
-}
-
-function readExtraString(extra: ExtraPayload, key: string): string | null {
-  if (!extra || typeof extra !== "object") {
-    return null;
-  }
-  const value = extra[key];
-  if (typeof value === "string" && value.trim()) {
-    return value.trim();
-  }
-  return null;
 }
 
 function ensureExtraObject(value: ExtraPayload): Record<string, unknown> {
