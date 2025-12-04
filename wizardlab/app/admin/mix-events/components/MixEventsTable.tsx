@@ -25,6 +25,8 @@ const columns: ColumnDef[] = [
   { key: "positions", label: "Positions" },
 ];
 
+const ROW_INCREMENT = 20;
+
 type MixEventsTableProps = {
   rows: MixEventsTableRow[];
 };
@@ -32,6 +34,7 @@ type MixEventsTableProps = {
 export default function MixEventsTable({ rows }: MixEventsTableProps) {
   const [sortKey, setSortKey] = useState<SortKey>("createdAt");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [visibleCount, setVisibleCount] = useState<number>(ROW_INCREMENT);
 
   const sortedRows = useMemo(() => {
     const sorted = [...rows];
@@ -53,6 +56,11 @@ export default function MixEventsTable({ rows }: MixEventsTableProps) {
     return sorted;
   }, [rows, sortDirection, sortKey]);
 
+  const visibleRows = useMemo(
+    () => sortedRows.slice(0, visibleCount),
+    [sortedRows, visibleCount]
+  );
+
   const handleSortChange = (key: string) => {
     if (!isSortKey(key)) return;
     if (key === sortKey) {
@@ -69,7 +77,7 @@ export default function MixEventsTable({ rows }: MixEventsTableProps) {
       timeStyle: "short",
     });
 
-  const tableRows = sortedRows.map((row) => ({
+  const tableRows = visibleRows.map((row) => ({
     createdAt: (
       <span className="whitespace-nowrap font-medium text-neutral-900">
         {formatDate(row.createdAt)}
@@ -83,15 +91,37 @@ export default function MixEventsTable({ rows }: MixEventsTableProps) {
     positions: row.positions,
   }));
 
+  const remainingRowsCount = Math.max(sortedRows.length - visibleRows.length, 0);
+  const shouldShowLoadMore = remainingRowsCount > 0;
+  const handleLoadMore = () => {
+    setVisibleCount((prev) =>
+      Math.min(prev + ROW_INCREMENT, sortedRows.length)
+    );
+  };
+
   return (
-    <DataTable
-      columns={columns}
-      rows={tableRows}
-      sortKey={sortKey}
-      sortDirection={sortDirection}
-      onSortChange={handleSortChange}
-      emptyMessage="No mix events in this range yet."
-    />
+    <div className="flex flex-col gap-3">
+      <DataTable
+        columns={columns}
+        rows={tableRows}
+        sortKey={sortKey}
+        sortDirection={sortDirection}
+        onSortChange={handleSortChange}
+        emptyMessage="No mix events in this range yet."
+      />
+
+      {shouldShowLoadMore && (
+        <div className="flex justify-center">
+          <button
+            type="button"
+            className="inline-flex w-full max-w-sm items-center justify-center rounded-full border border-neutral-200 bg-white px-4 py-2 text-sm font-semibold text-neutral-900 shadow-sm transition hover:bg-neutral-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-neutral-500 sm:text-sm"
+            onClick={handleLoadMore}
+          >
+            Load {Math.min(ROW_INCREMENT, remainingRowsCount)} more events
+          </button>
+        </div>
+      )}
+    </div>
   );
 }
 

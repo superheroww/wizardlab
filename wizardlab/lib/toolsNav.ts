@@ -7,6 +7,12 @@ export type ToolNavItem = {
 
 export const TOOL_NAV_ITEMS: ToolNavItem[] = [
   {
+    id: "insight",
+    title: "Insight dashboard",
+    description: "Monitor early product behavior and mix funnel performance.",
+    href: "/admin/insight",
+  },
+  {
     id: "mix-events",
     title: "Mix events analytics",
     description: "View ETF mix events, top symbols, and popular combinations.",

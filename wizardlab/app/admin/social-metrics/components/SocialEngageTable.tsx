@@ -42,10 +42,10 @@ const sortableKeys: SortKey[] = [
 
 const columns: ColumnDef[] = [
   { key: "created_at", label: "Created" },
-  { key: "title", label: "Title / Body" },
-  { key: "ai_priority", label: "Priority" },
   { key: "status", label: "Status" },
   { key: "actions", label: "Actions" },
+  { key: "ai_priority", label: "Priority" },
+  { key: "title", label: "Title / Body" },
 ];
 
 export default function SocialEngageTable({
@@ -136,26 +136,6 @@ export default function SocialEngageTable({
           {shortDateTime(row.created_at)}
         </span>
       ),
-      title: (
-        <div className="min-w-[18rem] space-y-1">
-          <div className="line-clamp-1 text-sm font-medium text-neutral-900">
-            {row.title || "(no title)"}
-          </div>
-          <div className="line-clamp-2 text-[0.8rem] text-neutral-500">
-            {truncate(row.body, 140)}
-          </div>
-          {row.ai_reason ? (
-            <div className="line-clamp-1 text-[0.7rem] uppercase text-neutral-400">
-              {row.ai_reason}
-            </div>
-          ) : null}
-        </div>
-      ),
-      ai_priority: (
-        <span className="capitalize text-sm text-neutral-700">
-          {priorityLabel}
-        </span>
-      ),
       status: <StatusPill status={row.status} variant="compact" />,
       actions: (
         <div className="flex flex-wrap justify-end gap-2">
@@ -181,6 +161,26 @@ export default function SocialEngageTable({
                 void handlePost(row);
               }}
             />
+          ) : null}
+        </div>
+      ),
+      ai_priority: (
+        <span className="capitalize text-sm text-neutral-700">
+          {priorityLabel}
+        </span>
+      ),
+      title: (
+        <div className="min-w-[18rem] space-y-1">
+          <div className="line-clamp-1 text-sm font-medium text-neutral-900">
+            {row.title || "(no title)"}
+          </div>
+          <div className="line-clamp-2 text-[0.8rem] text-neutral-500">
+            {truncate(row.body, 140)}
+          </div>
+          {row.ai_reason ? (
+            <div className="line-clamp-1 text-[0.7rem] uppercase text-neutral-400">
+              {row.ai_reason}
+            </div>
           ) : null}
         </div>
       ),
