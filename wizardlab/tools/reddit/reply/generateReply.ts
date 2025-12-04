@@ -1,5 +1,5 @@
 import { openai, MODELS } from "@/tools/utils/openai";
-import redditReplyPrompt from "@/prompts/reddit_reply";
+import { redditReplyPrompt } from "@/prompts/reddit_reply";
 
 type ReplyPayload = {
   platform: string;
@@ -18,7 +18,7 @@ const buildPrompt = ({ platform, permalink, title, body, trackingUrl }: ReplyPay
     trackingUrl ? `Tracking URL: ${trackingUrl}` : undefined,
   ].filter(Boolean);
 
-  return [redditReplyPrompt, ...details].join("\n\n");
+  return details.join("\n\n");
 };
 
 export async function generateRedditReply(payload: ReplyPayload): Promise<string> {
@@ -26,7 +26,10 @@ export async function generateRedditReply(payload: ReplyPayload): Promise<string
 
   const completion = await openai.chat.completions.create({
     model: MODELS.reply,
-    messages: [{ role: "user", content: prompt }],
+    messages: [
+      { role: "system", content: redditReplyPrompt },
+      { role: "user", content: prompt },
+    ],
   });
 
   const reply = completion.choices?.[0]?.message?.content?.toString().trim();

@@ -8,7 +8,6 @@
     "build:legacy": "NEXT_DISABLE_LIGHTNINGCSS=1 next build --webpack",
     "start": "next start",
     "lint": "eslint",
-    "test:classifier": "ts-node scripts/testClassifier.ts",
     "test:reply": "ts-node scripts/testReply.ts",
     "test:reddit-images": "ts-node-esm scripts/testRedditImageExtraction.ts",
     "social-ingest:consume": "ts-node-esm scripts/socialIngestConsumer.ts"
