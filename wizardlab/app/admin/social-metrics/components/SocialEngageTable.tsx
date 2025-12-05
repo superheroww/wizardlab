@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { StatusPill } from "@/components/social/StatusPill";
 import { DataTable, type ColumnDef } from "@/components/ui/DataTable";
@@ -63,7 +63,12 @@ export default function SocialEngageTable({
     direction: "desc",
   });
   const [modalRow, setModalRow] = useState<SocialEngageRow | null>(null);
+  const [visibleCount, setVisibleCount] = useState(15);
   const { handlePost } = useSocialPostHandler();
+
+  useEffect(() => {
+    setVisibleCount(15);
+  }, [rows, statusFilter]);
 
   const filteredRows = useMemo(() => {
     if (filterMode !== "status") return rows;
@@ -227,6 +232,13 @@ export default function SocialEngageTable({
     };
   });
 
+  const visibleRows = tableRows.slice(0, visibleCount);
+  const hasMore = visibleCount < sortedRows.length;
+
+  const handleLoadMore = () => {
+    setVisibleCount((prev) => Math.min(prev + 15, sortedRows.length));
+  };
+
   const hasRows = rows.length > 0;
 
   return (
@@ -258,7 +270,7 @@ export default function SocialEngageTable({
 
       <DataTable
         columns={columns}
-        rows={tableRows}
+        rows={visibleRows}
         sortKey={sortConfig.key}
         sortDirection={sortConfig.direction}
         onSortChange={handleSortChange}
@@ -266,6 +278,17 @@ export default function SocialEngageTable({
           hasRows ? "No rows match this filter." : "No engagement rows yet."
         }
       />
+      {hasMore ? (
+        <div className="mt-3 flex justify-center">
+          <button
+            type="button"
+            onClick={handleLoadMore}
+            className="inline-flex items-center justify-center rounded-full border border-neutral-300 bg-white px-4 py-2 text-xs font-medium text-neutral-700 transition hover:bg-neutral-50"
+          >
+            Load more
+          </button>
+        </div>
+      ) : null}
 
       {modalRow ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 backdrop-blur-sm">
