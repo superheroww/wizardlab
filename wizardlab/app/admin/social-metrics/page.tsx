@@ -55,27 +55,18 @@ export default async function SocialMetricsPage() {
 
   return (
     <div className="flex flex-col gap-8">
+      {(dailyError || rowsError) && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {dailyError && <div>Daily metrics error: {dailyError.message}</div>}
+          {rowsError && <div>Rows error: {rowsError.message}</div>}
+        </div>
+      )}
+
       <MainShell
         title="Social metrics"
         description="Track Reddit triggers, posts, and engagement."
       >
-        {(dailyError || rowsError) && (
-          <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-            {dailyError && <div>Daily metrics error: {dailyError.message}</div>}
-            {rowsError && <div>Rows error: {rowsError.message}</div>}
-          </div>
-        )}
-
         <StatusOverview rows={rows} />
-
-        <div className="space-y-2">
-          <h3 className="text-base font-semibold text-neutral-900">Daily activity</h3>
-          <DataTable
-            columns={dailyColumns}
-            rows={dailyRows}
-            emptyMessage="No daily metrics yet."
-          />
-        </div>
       </MainShell>
 
       <MainShell
@@ -86,6 +77,17 @@ export default async function SocialMetricsPage() {
           <ManualIngestCard />
           <SocialEngagePanel rows={rows} filterMode="status" />
         </div>
+      </MainShell>
+
+      <MainShell
+        title="Daily activity"
+        description="Track daily Reddit triggers and replies."
+      >
+        <DataTable
+          columns={dailyColumns}
+          rows={dailyRows}
+          emptyMessage="No daily metrics yet."
+        />
       </MainShell>
     </div>
   );
