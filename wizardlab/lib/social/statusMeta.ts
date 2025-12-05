@@ -1,10 +1,11 @@
 const STATUS_SEQUENCE = [
   "pending",
   "ready",
-  "ignored",
-  "error",
-  "duplicate_semantic",
   "posted",
+  "ai_misclassified",
+  "ignored",
+  "duplicate_semantic",
+  "error",
 ] as const;
 
 export type KnownStatus = (typeof STATUS_SEQUENCE)[number];
@@ -60,6 +61,13 @@ const STATUS_META: Record<string, StatusMeta> = {
     border: "border-slate-200",
     dot: "bg-slate-500",
   },
+  ai_misclassified: {
+    label: "AI misclassified",
+    bg: "bg-sky-50",
+    text: "text-sky-800",
+    border: "border-sky-100",
+    dot: "bg-sky-400",
+  },
   unknown: {
     label: "Other",
     bg: "bg-neutral-50",
@@ -78,6 +86,7 @@ export function normalizeStatus(status?: string | null): string {
   if (!status) return "unknown";
   const normalized = status.toLowerCase();
   if (normalized === "duplicate") return "duplicate_semantic";
+  if (normalized === "ai_misclassified") return "ai_misclassified";
   return normalized;
 }
 

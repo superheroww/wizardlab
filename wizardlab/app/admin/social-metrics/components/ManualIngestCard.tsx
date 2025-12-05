@@ -9,12 +9,15 @@ type Feedback = {
 };
 
 const API_ENDPOINT = "/api/social/ingest";
+const CRON_ENDPOINT = "/api/social/cron";
 
 export default function ManualIngestCard() {
   const router = useRouter();
   const [redditUrl, setRedditUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [feedback, setFeedback] = useState<Feedback | null>(null);
+  const [isTriggeringCron, setIsTriggeringCron] = useState(false);
+  const [cronFeedback, setCronFeedback] = useState<Feedback | null>(null);
 
   const trimmedUrl = redditUrl.trim();
   const canSubmit = !!trimmedUrl && !isLoading;
@@ -63,6 +66,39 @@ export default function ManualIngestCard() {
       });
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleTriggerCron = async () => {
+    setIsTriggeringCron(true);
+    setCronFeedback(null);
+
+    try {
+      const response = await fetch(CRON_ENDPOINT, {
+        method: "POST",
+      });
+
+      if (!response.ok) {
+        setCronFeedback({
+          type: "error",
+          message: "Cron trigger failed. Please try again.",
+        });
+        return;
+      }
+
+      setCronFeedback({
+        type: "success",
+        message: "Phase 2 pipeline triggered.",
+      });
+      router.refresh();
+    } catch (error) {
+      console.error("Phase 2 cron trigger failed:", error);
+      setCronFeedback({
+        type: "error",
+        message: "Cron trigger failed. Please try again.",
+      });
+    } finally {
+      setIsTriggeringCron(false);
     }
   };
 
@@ -122,6 +158,38 @@ export default function ManualIngestCard() {
           </p>
         ) : null}
       </form>
+
+      <div className="mt-6 space-y-3 rounded-xl border border-dashed border-neutral-200 bg-neutral-50 p-4">
+        <div>
+          <p className="text-sm font-semibold text-neutral-900">Phase 2 pipeline</p>
+          <p className="text-xs text-neutral-500">
+            Manually trigger the social cron job (runs phase 2 processing).
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={handleTriggerCron}
+          disabled={isTriggeringCron}
+          className={`w-full rounded-xl border px-4 py-2 text-sm font-semibold transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 ${
+            isTriggeringCron
+              ? "cursor-not-allowed border-neutral-200 bg-white text-neutral-400"
+              : "border-neutral-900 bg-white text-neutral-900 hover:bg-neutral-100"
+          }`}
+        >
+          {isTriggeringCron ? "Triggering…" : "Run AI"}
+        </button>
+        {cronFeedback ? (
+          <p
+            role="status"
+            aria-live="polite"
+            className={`text-sm ${
+              cronFeedback.type === "error" ? "text-red-600" : "text-emerald-600"
+            }`}
+          >
+            {cronFeedback.message}
+          </p>
+        ) : null}
+      </div>
     </div>
   );
 }

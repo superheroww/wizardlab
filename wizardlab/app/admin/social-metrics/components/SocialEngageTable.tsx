@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { StatusPill } from "@/components/social/StatusPill";
 import { DataTable, type ColumnDef } from "@/components/ui/DataTable";
 import { normalizeStatus } from "@/lib/social/statusMeta";
@@ -32,6 +33,7 @@ const STATUS_FILTERS: Array<{ key: StatusFilter; label: string }> = [
   { key: "error", label: "Error" },
   { key: "duplicate_semantic", label: "Duplicates" },
   { key: "posted", label: "Posted" },
+  { key: "ai_misclassified", label: "AI misclassified" },
 ];
 
 const sortableKeys: SortKey[] = [
@@ -54,6 +56,7 @@ export default function SocialEngageTable({
   filterMode = "none",
   onViewRow,
 }: Props) {
+  const router = useRouter();
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [sortConfig, setSortConfig] = useState<SortConfig>({
     key: "created_at",
@@ -127,6 +130,25 @@ export default function SocialEngageTable({
     return text.slice(0, max) + "…";
   }
 
+  const markAsAiMisclassified = async (row: SocialEngageRow) => {
+    try {
+      await fetch("/api/social/engage/status", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: row.id,
+          status: "ai_misclassified",
+        }),
+      });
+
+      router.refresh();
+    } catch (err) {
+      // For now just log; we can add a toast later
+      // eslint-disable-next-line no-console
+      console.error("Failed to mark ai_misclassified", err);
+    }
+  };
+
   const tableRows = sortedRows.map((row) => {
     const canReply = !!row.ai_reply_draft;
     const isReady = row.status?.toLowerCase() === "ready";
@@ -173,6 +195,13 @@ export default function SocialEngageTable({
               }}
             />
           ) : null}
+          <ActionButton
+            label="AI wrong"
+            variant="ghost"
+            onClick={() => {
+              void markAsAiMisclassified(row);
+            }}
+          />
         </div>
       ),
       ai_priority: (
