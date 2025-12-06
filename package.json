@@ -10,7 +10,7 @@
     "vercel-build": "NEXT_DISABLE_LIGHTNINGCSS=1 npm run build"
   },
   "devDependencies": {
-    "next": "16.0.6"
+    "next": "^16.0.7"
   },
   "dependencies": {
     "styled-jsx": "^5.1.6"
