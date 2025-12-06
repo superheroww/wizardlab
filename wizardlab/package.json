@@ -2,6 +2,7 @@
   "name": "wizardlab",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev",
     "build": "NEXT_DISABLE_LIGHTNINGCSS=1 next build --webpack",

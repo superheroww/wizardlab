@@ -30,4 +30,10 @@ export const TOOL_NAV_ITEMS: ToolNavItem[] = [
     description: "Inspect normalized ETF holdings by fund and symbol.",
     href: "/admin/etf-holdings",
   },
+  {
+    id: "users",
+    title: "Users",
+    description: "Browse registered accounts and domains (emails hidden).",
+    href: "/admin/users",
+  },
 ];
