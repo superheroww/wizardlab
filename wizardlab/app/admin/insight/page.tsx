@@ -31,7 +31,7 @@ export default async function InsightPage() {
               insight.summary.repeatMixersLast7d
             )}`}
           />
-          <SummaryCard title="Scratch vs template">
+          <SummaryCard title="Mixes by source (last 7 days)">
             <dl className="space-y-1">
               <div className="flex items-center justify-between text-sm text-neutral-600">
                 <dt>Scratch</dt>
@@ -105,6 +105,64 @@ export default async function InsightPage() {
       </MainShell>
 
       <MainShell
+        title="Template ideas from scratch"
+        description="Scratch-only mixes that show up repeatedly without a matching template (last 30 days)."
+      >
+        <div className="overflow-x-auto rounded-2xl border border-neutral-200 bg-white shadow-sm">
+          <table className="min-w-[480px] divide-y divide-neutral-200 text-sm">
+            <thead className="bg-neutral-50 text-left text-xs font-semibold uppercase text-neutral-500">
+              <tr>
+                <th scope="col" className="px-4 py-3">
+                  Mix (top symbols)
+                </th>
+                <th scope="col" className="px-4 py-3 text-right">
+                  Scratch mixes
+                </th>
+                <th scope="col" className="px-4 py-3 text-right">
+                  Unique users
+                </th>
+                <th scope="col" className="px-4 py-3">
+                  First seen
+                </th>
+                <th scope="col" className="px-4 py-3">
+                  Last seen
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-neutral-100 text-neutral-900">
+              {insight.templateIdeas.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="px-4 py-6 text-center text-sm text-neutral-500"
+                  >
+                    No clear scratch-only patterns yet. Once more people build custom mixes,
+                    likely template ideas will show up here.
+                  </td>
+                </tr>
+              ) : (
+                insight.templateIdeas.map((row) => (
+                  <tr key={row.mixKey}>
+                    <td className="px-4 py-3 font-medium text-neutral-900">
+                      {row.topSymbols.length > 0 ? row.topSymbols.join(" / ") : row.mixKey}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {numberFormatter.format(row.scratchCount)}
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      {numberFormatter.format(row.uniqueUsers)}
+                    </td>
+                    <td className="px-4 py-3 text-neutral-600">{formatDate(row.firstSeenAt)}</td>
+                    <td className="px-4 py-3 text-neutral-600">{formatDate(row.lastSeenAt)}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+      </MainShell>
+
+      <MainShell
         title="Power users"
         description="Top repeat mixers with first/last seen timestamps."
       >
@@ -119,10 +177,10 @@ export default async function InsightPage() {
                   Total mixes
                 </th>
                 <th scope="col" className="px-4 py-3 text-right">
-                  Scratch
+                  Scratch mixes
                 </th>
                 <th scope="col" className="px-4 py-3 text-right">
-                  Template
+                  Template mixes
                 </th>
                 <th scope="col" className="px-4 py-3">
                   First seen
