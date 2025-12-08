@@ -9,7 +9,7 @@ export async function GET() {
     .from("positions")
     .select("*")
     .order("id", { ascending: true })
-    .limit(20);
+    .limit(1000);
 
   return Response.json({ data, error });
 }

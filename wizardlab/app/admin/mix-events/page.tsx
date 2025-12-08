@@ -4,6 +4,8 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { MainShell } from "@/components/layout/MainShell";
 import { StatCard } from "@/components/ui/StatCard";
 import { summarizePositions } from "@/lib/mix-events/symbols";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 import MixEventsTable from "./components/MixEventsTable";
 import { MixInsightsSection } from "./components/MixInsightsSection";

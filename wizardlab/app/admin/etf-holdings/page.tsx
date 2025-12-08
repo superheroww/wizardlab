@@ -6,6 +6,8 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { EtfHoldingsSummaryCard, type EtfSummaryRow } from "./components/EtfHoldingsSummaryCard";
 import { EtfHoldingsTable } from "./components/EtfHoldingsTable";
 import type { EtfHolding } from "./types";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const MAX_ROWS = 200;
 
