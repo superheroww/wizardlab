@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 
 import { MainShell } from "@/components/layout/MainShell";
 import { getInsightData } from "@/lib/insight";
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
 
 const numberFormatter = new Intl.NumberFormat("en-US");
 const decimalFormatter = new Intl.NumberFormat("en-US", {
